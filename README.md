@@ -2,37 +2,32 @@
 
 Creating a web access interface to connect to Go2 functions.
 
-## FastAPI backend (sit/stand via Unitree sport client)
+## FastAPI backend (prototype)
 
-This backend runs on the robot (or a nearby edge device) and exposes HTTP
-endpoints to start/stop two whitelisted actions:
-
-- `sit`   → `/home/unitree/unitree_ros2/example/install/unitree_ros2_example/bin/go2_sport_client 3`
-- `stand` → `/home/unitree/unitree_ros2/example/install/unitree_ros2_example/bin/go2_sport_client 4`
-
-Before running either action, the server sources the required ROS and Unitree
-workspaces so the executable works even when launched via HTTP.
+This backend runs on the robot (or an edge box on the same network) and exposes
+HTTP endpoints to start or stop curated actions. Two example actions are wired:
+`sit` and `stand`. Each action maps to a shell command so you can run ROS 2
+launch files without exposing arbitrary shell access.
 
 ### How it works
-- A `CommandManager` keeps an allowlist of actions → commands.
-- `COMMON_PRE_COMMANDS` defines shell commands that run **before every action**
-  (e.g., sourcing `setup.bash` files).
-- On `POST /actions/{action}`, the server builds one shell command by joining
-  pre-commands + the action command with `&&`, then spawns it via `/bin/bash`.
-- On `POST /actions/{action}/stop`, the server sends SIGTERM (then SIGKILL if
-  needed) to the tracked process for that action.
+- A **CommandManager** keeps an allowlist of actions → commands.
+- On `POST /actions/{action}`, the manager starts the configured command in a
+  new session and returns the process PID immediately. Output is logged to the
+  server logs.
+- On `POST /actions/{action}/stop`, the manager sends SIGTERM (and SIGKILL if
+  needed) to stop the process.
+- If `ROS_SETUP_PATH` is set, the server sources that script before running any
+  command (e.g., `export ROS_SETUP_PATH=/opt/ros/humble/setup.bash`).
 
-### Paths used (edit in `app/main.py` if your layout differs)
-- ROS setup: `/opt/ros/foxy/setup.bash`
-- Unitree root: `/home/unitree/unitree_ros2`
-- CycloneDDS overlay: `/home/unitree/unitree_ros2/cyclonedds_ws/install/setup.bash`
-- Unitree main overlay: `/home/unitree/unitree_ros2/install/setup.bash`
-- Example overlay: `/home/unitree/unitree_ros2/example/install/setup.bash`
-- Sport client executable: `/home/unitree/unitree_ros2/example/install/unitree_ros2_example/bin/go2_sport_client`
-  - `sit`   runs with arg `3`
-  - `stand` runs with arg `4`
+### Configure the commands
+Set environment variables so the backend can call your actual ROS 2 launch
+files or helpers:
 
-If your paths differ, update the constants at the top of `app/main.py`.
+```bash
+export ROS_SETUP_PATH=/opt/ros/humble/setup.bash
+export SIT_COMMAND="ros2 launch your_pkg sit.launch.py"
+export STAND_COMMAND="ros2 launch your_pkg stand.launch.py"
+```
 
 ### Run the server
 ```bash
@@ -54,5 +49,6 @@ curl http://localhost:8000/health
 
 ### Connecting to the robot
 Run the server directly on the Go2 (or a nearby edge computer that has network
-access to the robot). A web frontend can call these endpoints to trigger the
-sit/stand actions through an allowlist, without exposing arbitrary shell access.
+access to the robot and ROS 2 environment available). A web frontend can call
+these endpoints (and a WebSocket terminal later) to trigger the sit/stand
+launch files safely through this allowlist-based API.
