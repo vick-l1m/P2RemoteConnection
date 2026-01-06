@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import signal
 from typing import Dict
 
@@ -10,24 +11,6 @@ from pydantic import BaseModel
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
-
-
-# Fixed configuration for ROS environment and action commands.
-DEFAULT_ROS_SETUP_PATH = "/opt/ros/humble/setup.bash"
-DEFAULT_SIT_COMMAND = "ros2 launch your_pkg sit.launch.py"
-DEFAULT_STAND_COMMAND = "ros2 launch your_pkg stand.launch.py"
-
-
-# Fixed configuration for ROS environment and action commands.
-DEFAULT_ROS_SETUP_PATH = "/opt/ros/humble/setup.bash"
-DEFAULT_SIT_COMMAND = "ros2 launch your_pkg sit.launch.py"
-DEFAULT_STAND_COMMAND = "ros2 launch your_pkg stand.launch.py"
-
-
-# Fixed configuration for ROS environment and action commands.
-DEFAULT_ROS_SETUP_PATH = "/opt/ros/humble/setup.bash"
-DEFAULT_SIT_COMMAND = "ros2 launch your_pkg sit.launch.py"
-DEFAULT_STAND_COMMAND = "ros2 launch your_pkg stand.launch.py"
 
 
 class ActionStartResponse(BaseModel):
@@ -102,10 +85,10 @@ class CommandManager:
 
 
 def build_command_manager() -> CommandManager:
-    ros_setup_path = DEFAULT_ROS_SETUP_PATH
+    ros_setup_path = os.getenv("ROS_SETUP_PATH")
     commands = {
-        "sit": DEFAULT_SIT_COMMAND,
-        "stand": DEFAULT_STAND_COMMAND,
+        "sit": os.getenv("SIT_COMMAND", "echo 'Executing sit command (configure SIT_COMMAND)'"),
+        "stand": os.getenv("STAND_COMMAND", "echo 'Executing stand command (configure STAND_COMMAND)'"),
     }
     return CommandManager(commands=commands, ros_setup_path=ros_setup_path)
 

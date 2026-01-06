@@ -20,12 +20,14 @@ launch files without exposing arbitrary shell access.
   command (e.g., `export ROS_SETUP_PATH=/opt/ros/humble/setup.bash`).
 
 ### Configure the commands
-Paths are fixed in code for simplicity. Edit `app/main.py` to point to your
-actual ROS setup script and launch files:
+Set environment variables so the backend can call your actual ROS 2 launch
+files or helpers:
 
-- `DEFAULT_ROS_SETUP_PATH` (default: `/opt/ros/humble/setup.bash`)
-- `DEFAULT_SIT_COMMAND` (default: `ros2 launch your_pkg sit.launch.py`)
-- `DEFAULT_STAND_COMMAND` (default: `ros2 launch your_pkg stand.launch.py`)
+```bash
+export ROS_SETUP_PATH=/opt/ros/humble/setup.bash
+export SIT_COMMAND="ros2 launch your_pkg sit.launch.py"
+export STAND_COMMAND="ros2 launch your_pkg stand.launch.py"
+```
 
 ### Run the server
 ```bash
