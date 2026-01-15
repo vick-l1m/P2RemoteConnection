@@ -1,6 +1,15 @@
 cmake_minimum_required(VERSION 3.10)
 project(p2_remote_connection)
 
+# Force C++17 (needed for std::scoped_lock, nested namespaces, etc.)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Force C++17 specifically for this target (robust against overrides)
+target_compile_features(web_teleop_bridge PUBLIC cxx_std_17)
+target_compile_options(web_teleop_bridge PRIVATE -std=gnu++17)
+
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
@@ -18,6 +27,12 @@ add_executable(web_teleop_bridge
   src/web_teleop_bridge.cpp
   src/common/ros2_sport_client.cpp
 )
+
+target_compile_features(web_teleop_bridge PUBLIC cxx_std_17)
+# and/or explicitly:
+target_compile_options(web_teleop_bridge PRIVATE -std=c++17)
+
+
 ament_target_dependencies(web_teleop_bridge
   rclcpp
   geometry_msgs

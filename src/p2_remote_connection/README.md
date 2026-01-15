@@ -23,36 +23,53 @@ You can explore and test everything using FastAPI’s built-in UI:
 
 - `http://<go2-ip>:8000/docs`
 
-### Configure the commands
-Set environment variables so the backend can call your actual ROS 2 launch
-files or helpers:
 
-```bash
-export ROS_SETUP_PATH=/opt/ros/humble/setup.bash
-export SIT_COMMAND="ros2 launch your_pkg sit.launch.py"
-export STAND_COMMAND="ros2 launch your_pkg stand.launch.py"
-```
-
-### Run the server
+### Build the workspace
 
 On the Go2 (or the device running the server)
 ```bash
 pip3 install fastapi uvicorn
 pip install -r requirements.txt
-cd ~/P2/P2RemoteConnection
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+source ~/unitree_ros2/install/setup.sh
+cd ~/P2RemoteConnection
+colcon build
+source install/setup.bash
+```
+
+### Launch
+Launch the main backend:
+```bash
+cd ~/P2RemoteConnection/src/p2_remote_connection
+source install/setup.bash
+python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 In a seperate terminal, run the html: 
 ```bash
-cd ~/P2/P2RemoteConnection/app
+cd ~/P2RemoteConnection/src/p2_remote_connection
+source install/setup.bash
 python3 -m http.server 8081
 ```
 
+In a 3rd terminal, run the web_teleop bridge
+```bash
+cd ~/P2RemoteConnection/src/p2_remote_connection
+source install/setup.bash
+ros2 run p2_remote_connection web_teleop_bridge
+```
+
 Open the website on a device connected to the same wifi:
+Check the device ip address:
 
-<device_ip>::8081/go2_remote.html
+```bash
+hostname -I
+```
+Then search up the website:
+```bash
+<device_ip>::8081/go2_joystick.html
 
+go2: 192.168.123.18/go2_joystick.html
+````
 ## Robot Commands
 
 Commands live in the COMMANDS dictionary in app/main.py:

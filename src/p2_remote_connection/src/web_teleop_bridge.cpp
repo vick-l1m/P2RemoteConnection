@@ -34,7 +34,7 @@ public:
 
 private:
   void teleopCb(const geometry_msgs::msg::Twist::SharedPtr msg) {
-    std::scoped_lock<std::mutex> lk(mtx_);
+    std::lock_guard<std::mutex> lk(mtx_);
     latest_vx_ = msg->linear.x;
     latest_vy_ = msg->linear.y;
     latest_vyaw_ = msg->angular.z;
@@ -67,7 +67,7 @@ private:
 
     double vx, vy, vyaw;
     {
-      std::scoped_lock<std::mutex> lk(mtx_);
+      std::lock_guard<std::mutex> lk(mtx_);
       vx = latest_vx_;
       vy = latest_vy_;
       vyaw = latest_vyaw_;
