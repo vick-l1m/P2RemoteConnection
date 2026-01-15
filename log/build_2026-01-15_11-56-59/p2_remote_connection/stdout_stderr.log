@@ -1,0 +1,68 @@
+-- Found ament_cmake: 1.3.12 (/opt/ros/humble/share/ament_cmake/cmake)
+-- Found rclcpp: 16.0.15 (/opt/ros/humble/share/rclcpp/cmake)
+-- Found rosidl_generator_c: 3.1.7 (/opt/ros/humble/share/rosidl_generator_c/cmake)
+-- Found rosidl_adapter: 3.1.7 (/opt/ros/humble/share/rosidl_adapter/cmake)
+-- Found rosidl_generator_cpp: 3.1.7 (/opt/ros/humble/share/rosidl_generator_cpp/cmake)
+-- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+-- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+-- Found rmw_implementation_cmake: 6.1.2 (/opt/ros/humble/share/rmw_implementation_cmake/cmake)
+-- Found rmw_cyclonedds_cpp: 1.3.4 (/opt/ros/humble/share/rmw_cyclonedds_cpp/cmake)
+-- Using RMW implementation 'rmw_cyclonedds_cpp' as default
+-- Found geometry_msgs: 4.9.0 (/opt/ros/humble/share/geometry_msgs/cmake)
+-- Found unitree_api: 0.0.0 (/home/victor-22/unitree_ros2/cyclonedds_ws/install/unitree_api/share/unitree_api/cmake)
+-- Found unitree_go: 0.0.0 (/home/victor-22/unitree_ros2/cyclonedds_ws/install/unitree_go/share/unitree_go/cmake)
+-- Configuring done (0.5s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/victor-22/p2_ws/P2RemoteConnection/build/p2_remote_connection
+[ 33%] [32mBuilding CXX object CMakeFiles/web_teleop_bridge.dir/src/web_teleop_bridge.cpp.o[0m
+[ 66%] [32mBuilding CXX object CMakeFiles/web_teleop_bridge.dir/src/common/ros2_sport_client.cpp.o[0m
+[100%] [1m[32mLinking CXX executable web_teleop_bridge[0m
+[100%] Built target web_teleop_bridge
+-- Install configuration: ""
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/lib/p2_remote_connection/web_teleop_bridge
+-- Set non-toolchain portion of runtime path of "/home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/lib/p2_remote_connection/web_teleop_bridge" to ""
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include/
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/command_transfer.h
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/patch.hpp
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/motor_crc.h
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/build
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/build/.built_by
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/build/COLCON_IGNORE
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/ros2_sport_client.h
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/log
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/log/latest_build
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/log/build_2026-01-14_12-53-05
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/log/build_2026-01-14_12-53-05/events.log
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/log/build_2026-01-14_12-53-05/logger_all.log
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/log/latest
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/log/COLCON_IGNORE
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/local_setup.zsh
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/_local_setup_util_ps1.py
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/_local_setup_util_sh.py
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/setup.bash
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/setup.sh
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/local_setup.sh
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/setup.ps1
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/COLCON_IGNORE
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/local_setup.bash
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/local_setup.ps1
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/setup.zsh
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/.colcon_install_layout
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/ament_index/resource_index/package_run_dependencies/p2_remote_connection
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/ament_index/resource_index/parent_prefix_path/p2_remote_connection
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/environment/ament_prefix_path.sh
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/environment/ament_prefix_path.dsv
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/environment/path.sh
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/environment/path.dsv
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/local_setup.bash
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/local_setup.sh
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/local_setup.zsh
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/local_setup.dsv
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/package.dsv
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/ament_index/resource_index/packages/p2_remote_connection
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/cmake/p2_remote_connectionConfig.cmake
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/cmake/p2_remote_connectionConfig-version.cmake
+-- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/package.xml

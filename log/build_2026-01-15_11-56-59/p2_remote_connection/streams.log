@@ -1,0 +1,74 @@
+[0.009s] Invoking command in '/home/victor-22/p2_ws/P2RemoteConnection/build/p2_remote_connection': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /home/victor-22/.local/bin/cmake /home/victor-22/p2_ws/P2RemoteConnection/src/p2_remote_connection -DCMAKE_INSTALL_PREFIX=/home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection
+[0.087s] -- Found ament_cmake: 1.3.12 (/opt/ros/humble/share/ament_cmake/cmake)
+[0.269s] -- Found rclcpp: 16.0.15 (/opt/ros/humble/share/rclcpp/cmake)
+[0.300s] -- Found rosidl_generator_c: 3.1.7 (/opt/ros/humble/share/rosidl_generator_c/cmake)
+[0.303s] -- Found rosidl_adapter: 3.1.7 (/opt/ros/humble/share/rosidl_adapter/cmake)
+[0.310s] -- Found rosidl_generator_cpp: 3.1.7 (/opt/ros/humble/share/rosidl_generator_cpp/cmake)
+[0.321s] -- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+[0.337s] -- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+[0.379s] -- Found rmw_implementation_cmake: 6.1.2 (/opt/ros/humble/share/rmw_implementation_cmake/cmake)
+[0.381s] -- Found rmw_cyclonedds_cpp: 1.3.4 (/opt/ros/humble/share/rmw_cyclonedds_cpp/cmake)
+[0.402s] -- Using RMW implementation 'rmw_cyclonedds_cpp' as default
+[0.470s] -- Found geometry_msgs: 4.9.0 (/opt/ros/humble/share/geometry_msgs/cmake)
+[0.487s] -- Found unitree_api: 0.0.0 (/home/victor-22/unitree_ros2/cyclonedds_ws/install/unitree_api/share/unitree_api/cmake)
+[0.506s] -- Found unitree_go: 0.0.0 (/home/victor-22/unitree_ros2/cyclonedds_ws/install/unitree_go/share/unitree_go/cmake)
+[0.584s] -- Configuring done (0.5s)
+[0.597s] -- Generating done (0.0s)
+[0.600s] -- Build files have been written to: /home/victor-22/p2_ws/P2RemoteConnection/build/p2_remote_connection
+[0.606s] Invoked command in '/home/victor-22/p2_ws/P2RemoteConnection/build/p2_remote_connection' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /home/victor-22/.local/bin/cmake /home/victor-22/p2_ws/P2RemoteConnection/src/p2_remote_connection -DCMAKE_INSTALL_PREFIX=/home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection
+[0.608s] Invoking command in '/home/victor-22/p2_ws/P2RemoteConnection/build/p2_remote_connection': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /home/victor-22/.local/bin/cmake --build /home/victor-22/p2_ws/P2RemoteConnection/build/p2_remote_connection -- -j8 -l8
+[0.695s] [ 33%] [32mBuilding CXX object CMakeFiles/web_teleop_bridge.dir/src/web_teleop_bridge.cpp.o[0m
+[0.695s] [ 66%] [32mBuilding CXX object CMakeFiles/web_teleop_bridge.dir/src/common/ros2_sport_client.cpp.o[0m
+[14.363s] [100%] [1m[32mLinking CXX executable web_teleop_bridge[0m
+[15.662s] [100%] Built target web_teleop_bridge
+[15.669s] Invoked command in '/home/victor-22/p2_ws/P2RemoteConnection/build/p2_remote_connection' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /home/victor-22/.local/bin/cmake --build /home/victor-22/p2_ws/P2RemoteConnection/build/p2_remote_connection -- -j8 -l8
+[15.776s] Invoking command in '/home/victor-22/p2_ws/P2RemoteConnection/build/p2_remote_connection': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /home/victor-22/.local/bin/cmake --install /home/victor-22/p2_ws/P2RemoteConnection/build/p2_remote_connection
+[15.856s] -- Install configuration: ""
+[15.857s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/lib/p2_remote_connection/web_teleop_bridge
+[15.868s] -- Set non-toolchain portion of runtime path of "/home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/lib/p2_remote_connection/web_teleop_bridge" to ""
+[15.868s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include/
+[15.868s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection
+[15.868s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/command_transfer.h
+[15.869s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common
+[15.869s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/patch.hpp
+[15.869s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/motor_crc.h
+[15.869s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/build
+[15.869s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/build/.built_by
+[15.869s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/build/COLCON_IGNORE
+[15.870s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/ros2_sport_client.h
+[15.870s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/log
+[15.870s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/log/latest_build
+[15.870s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/log/build_2026-01-14_12-53-05
+[15.870s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/log/build_2026-01-14_12-53-05/events.log
+[15.870s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/log/build_2026-01-14_12-53-05/logger_all.log
+[15.871s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/log/latest
+[15.871s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/log/COLCON_IGNORE
+[15.871s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install
+[15.871s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/local_setup.zsh
+[15.871s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/_local_setup_util_ps1.py
+[15.872s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/_local_setup_util_sh.py
+[15.872s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/setup.bash
+[15.872s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/setup.sh
+[15.873s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/local_setup.sh
+[15.873s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/setup.ps1
+[15.873s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/COLCON_IGNORE
+[15.873s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/local_setup.bash
+[15.873s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/local_setup.ps1
+[15.873s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/setup.zsh
+[15.874s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/include//p2_remote_connection/common/install/.colcon_install_layout
+[15.874s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/ament_index/resource_index/package_run_dependencies/p2_remote_connection
+[15.874s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/ament_index/resource_index/parent_prefix_path/p2_remote_connection
+[15.874s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/environment/ament_prefix_path.sh
+[15.875s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/environment/ament_prefix_path.dsv
+[15.875s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/environment/path.sh
+[15.876s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/environment/path.dsv
+[15.876s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/local_setup.bash
+[15.876s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/local_setup.sh
+[15.876s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/local_setup.zsh
+[15.877s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/local_setup.dsv
+[15.877s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/package.dsv
+[15.877s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/ament_index/resource_index/packages/p2_remote_connection
+[15.877s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/cmake/p2_remote_connectionConfig.cmake
+[15.877s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/cmake/p2_remote_connectionConfig-version.cmake
+[15.878s] -- Installing: /home/victor-22/p2_ws/P2RemoteConnection/install/p2_remote_connection/share/p2_remote_connection/package.xml
+[15.880s] Invoked command in '/home/victor-22/p2_ws/P2RemoteConnection/build/p2_remote_connection' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /home/victor-22/.local/bin/cmake --install /home/victor-22/p2_ws/P2RemoteConnection/build/p2_remote_connection
