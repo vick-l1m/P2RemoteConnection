@@ -33,6 +33,10 @@ public:
   }
 
 private:
+  static constexpr double VX_SCALE   = 2.0;  // forward/back speed multiplier
+  static constexpr double VY_SCALE   = 2.0;  // left/right speed multiplier
+  static constexpr double VYAW_SCALE = 1.5;  // turning speed multiplier
+
   void teleopCb(const geometry_msgs::msg::Twist::SharedPtr msg) {
     std::lock_guard<std::mutex> lk(mtx_);
     latest_vx_ = msg->linear.x;
@@ -84,7 +88,12 @@ private:
     if (stationary) {
       sportClient_.StopMove(req_);
     } else {
-      sportClient_.Move(req_, (float)vx, (float)vy, (float)vyaw);
+      const float cmd_vx = static_cast<float>(VX_SCALE * vx);
+      const float cmd_vy = static_cast<float>(VY_SCALE * -vy);
+      const float cmd_vyaw = static_cast<float>(VYAW_SCALE * -vyaw);
+
+
+      sportClient_.Move(req_, cmd_vx, cmd_vy, cmd_vyaw);
     }
   }
 

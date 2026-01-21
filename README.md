@@ -9,25 +9,17 @@ and exposes **HTTP endpoints** that trigger a **whitelisted set of shell command
 
 It’s designed for quick experiments: phone → HTTP → Go2 command.
 
-### How it works
-- `GET /health`  
-  Basic connectivity check (returns `{"status":"ok"}`)
-
-- `POST /actions/{action}`  
-  Runs a pre-defined command for that action (example: `sit`, `stand`)
-
-- `POST /actions/{action}/stop`  
-  Stops the currently-running process for that action (SIGTERM, then SIGKILL if needed)
-
-You can explore and test everything using FastAPI’s built-in UI:
-
-- `http://<go2-ip>:8000/docs`
-
 
 ### Build the workspace
 
+**1. Clone this workspace**
+```bash
+  git clone https://github.com/vick-l1m/P2RemoteConnection.git
+```
+
 On the Go2 (or the device running the server)
 ```bash
+cd ~/P2RemoteConnection/src/p2_remote_connection
 pip3 install fastapi uvicorn
 pip install -r requirements.txt
 source ~/unitree_ros2/install/setup.sh
@@ -36,26 +28,20 @@ colcon build
 source install/setup.bash
 ```
 
-### Launch
-Launch the main backend:
+### Launch the backend, webpage and ros2 node
+Make the command runnable and launch:
 ```bash
-cd ~/P2RemoteConnection/src/p2_remote_connection
-source install/setup.bash
-python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+cd ~/P2RemoteConnection
+chmod +x start_remote_connection.sh
+./start_remote_connection.sh
 ```
 
-In a seperate terminal, run the html: 
+To run on the Issac Sim:
 ```bash
-cd ~/P2RemoteConnection/src/p2_remote_connection
-source install/setup.bash
-python3 -m http.server 8081
-```
-
-In a 3rd terminal, run the web_teleop bridge
-```bash
-cd ~/P2RemoteConnection/src/p2_remote_connection
-source install/setup.bash
-ros2 run p2_remote_connection web_teleop_bridge
+use_fastrtps
+cd ~/P2RemoteConnection
+chmod +x start_remote_connection_humble.sh
+./start_remote_connection_humble.sh
 ```
 
 Open the website on a device connected to the same wifi:
@@ -69,20 +55,92 @@ Then search up the website:
 <device_ip>::8081/go2_joystick.html
 
 go2: 192.168.123.18/go2_joystick.html
-````
+```
+
 ## Robot Commands
 
-Commands live in the COMMANDS dictionary in app/main.py:
-```bash
-COMMANDS: Dict[str, str] = {
-    "sit":   f"{GO2_SPORT_CLIENT} 3",
-    "stand": f"{GO2_SPORT_CLIENT} 4",
-}
-```
 Each key is the action name used in the URL, and each value is the shell command that runs on the Go2.
 Example API call:
 
   curl -X POST http://<go2-ip>:8000/actions/stand
+
+
+### How it works
+The start up script runs 3 seperate process':
+
+**The backend (FastAPI)**:
+```bash
+python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+**The front (static webpage)**:
+```bash
+python3 -m http.server 8081
+```
+
+**The Ros2 bridge to run Go2 commands**
+```bash
+ros2 run p2_remote_connection web_teleop_bridge
+```
+The script does the following:
+  - Source ROS 2 Foxy
+  - Source Unitree Go2 ROS environment
+  - Source this workspace’s overlay
+  - Export DDS / ROS environment variables explicitly
+  - Wait for the Go2 driver node to be available
+  - Start:
+    - FastAPI backend
+    - HTTP static server
+    - web_teleop_bridge node
+
+They post to the server through the following:
+
+- `GET /health`  
+  Basic connectivity check (returns `{"status":"ok"}`)
+
+- `POST /actions/{action}`  
+  Runs a pre-defined command for that action (example: `sit`, `stand`)
+
+- `POST /actions/{action}/stop`  
+  Stops the currently-running process for that action (SIGTERM, then SIGKILL if needed)
+
+You can explore and test everything using FastAPI’s built-in UI:
+
+- `http://<go2-ip>:8000/docs`
+
+### Making the script run on startup
+
+1. Create a systemd service (autostart on boot)
+- A systemd service was created so the system:
+- Starts automatically on robot boot
+- Restarts if it crashes
+- Runs without any terminal attached
+- Logs output to journalctl
+
+**Service File Location**: 
+```swift
+/etc/systemd/system/p2-remote-connection.service
+```
+2. Enable and start the service:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable p2-remote-connection.service
+sudo systemctl start p2-remote-connection.service
+```
+
+3. Monitoring the service:
+- Check service status
+```bash
+systemctl status p2-remote-connection.service
+```
+- View logs live
+```bash
+journalctl -u p2-remote-connection.service -f
+```
+
+- Restart the system
+```bash
+sudo systemctl restart p2-remote-connection.service
+```
 
 ### Adding a new command:
 
