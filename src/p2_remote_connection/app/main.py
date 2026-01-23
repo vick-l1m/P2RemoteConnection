@@ -4,7 +4,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from app.ros_bridge import start_ros_bridge, get_bridge
-from .terminal import terminal_ws
 from fastapi import WebSocket
 
 import os
@@ -14,6 +13,12 @@ import hmac
 import time
 import secrets
 from typing import Optional, Dict, Any
+
+# Conditional import: use terminal_ec2 for EC2 deployment, terminal for robot
+if os.getenv("DEPLOYMENT_ENV") == "ec2":
+    from .terminal_ec2 import terminal_ws
+else:
+    from .terminal import terminal_ws
 
 # Authentication
 GO2_API_TOKEN = os.getenv("GO2_API_TOKEN", "")
