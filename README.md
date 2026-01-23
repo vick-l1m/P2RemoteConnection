@@ -165,8 +165,7 @@ You can explore and test everything using FastAPI’s built-in UI:
 
 ### Features
 #### 1.Login gate / UI lock
-
-- Shows loginOverlay
+- Shows login Overlay
 - Stores ROBOT_BASE_URL (where the robot’s API is) and AUTH_TOKEN (your password token)
 - Saves them into localStorage so the browser remembers them
 

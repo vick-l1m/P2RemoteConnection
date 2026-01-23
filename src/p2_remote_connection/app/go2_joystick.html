@@ -78,6 +78,7 @@
         <button onclick="checkHealth()">Health</button>
         <button onclick="postAction('stand')">Stand</button>
         <button onclick="postAction('sit')">Sit</button>
+        <button id="teleopToggleBtn" onclick="toggleTeleop()">Start Teleop</button>
         <button class="danger" onclick="emergencyStop()">STOP</button>
         <button onclick="toggleTerminal()">Terminal</button>
         <button onclick="logout()">Logout</button>
@@ -113,7 +114,7 @@
       </div>
 
       <div class="small" style="margin-top:10px;">
-        Tip: keep a finger on the joysticks; releasing them sends a zero command.
+        Tip: keep a finger on the joysticks; Teleop only sends commands while enabled.
       </div>
     </div>
   </div>
@@ -242,6 +243,11 @@
     ROBOT_BASE_URL = "";
     clearAuth();
 
+    // stop teleop if active
+    teleopEnabled = false;
+    setTeleopButton(false);
+    stopTeleopLoop();
+
     // Clear password box
     const t = document.getElementById("loginToken");
     if (t) t.value = "";
@@ -289,13 +295,9 @@
     lockUI();
   });
 
-    // ----------------------------
+  // ----------------------------
   // Networking helpers
   // ----------------------------
-  function baseUrl() {
-    return document.getElementById("baseUrl").value.trim().replace(/\/+$/, "");
-  }
-
   function setStatus(text, ok=true, detail="") {
     const msg = document.getElementById("msg");
     const detailEl = document.getElementById("detail");
@@ -377,10 +379,15 @@
   }
 
   async function emergencyStop() {
-    await sendTeleop(0, 0, 0);
+    teleopEnabled = false;
+    setTeleopButton(false);
+    stopTeleopLoop();
+
+    await sendTeleop(0, 0, 0, true);
     await httpPost(`/actions/stop`).catch(()=>{});
     setStatus("STOP sent ✅", true);
   }
+
 
   function ensureLoggedIn() {
     if (!AUTH_TOKEN || !baseUrl()) {
@@ -391,17 +398,26 @@
   }
 
   // ----------------------------
-  // Teleop send loop (rate-limited)
+  // Teleop enabled/disabled loop
   // ----------------------------
   let latest = { lx: 0, ly: 0, rx: 0, ry: 0 };
-  let sending = false;
-  let lastSendMs = 0;
 
   // Tuning (safe defaults)
   const MAX_LIN = 0.6;   // m/s
   const MAX_ANG = 1.2;   // rad/s
   const SEND_HZ = 10;    // send rate
   const SEND_PERIOD_MS = Math.floor(1000 / SEND_HZ);
+
+  let teleopEnabled = false;
+  let teleopTimer = null;
+  let zeroSentAfterStop = false;
+
+  function setTeleopButton(enabled) {
+    const btn = document.getElementById("teleopToggleBtn");
+    if (!btn) return;
+    btn.textContent = enabled ? "Stop Teleop" : "Start Teleop";
+    btn.classList.toggle("danger", enabled); // optional: make it red-ish when active
+  }
 
   function mapToCmd(lx, ly, rx) {
     // Joystick y is positive down; invert so up = forward
@@ -411,7 +427,7 @@
     return { linear_x, linear_y, angular_z };
   }
 
-  async function sendTeleop(lx, ly, rx) {
+  async function sendTeleop(lx, ly, rx, quiet=false) {
     if (!ensureLoggedIn()) return;
     const cmd = mapToCmd(lx, ly, rx);
     try {
@@ -422,11 +438,18 @@
           false,
           `URL: ${r.url}\n${r.text}\n\nIf you see HTTP 501, you're hitting :8081 not :8000.`
         );
-      } else {
+      } else if (!quiet) {
         setStatus(
           `Teleop: vx=${cmd.linear_x.toFixed(2)} vy=${cmd.linear_y.toFixed(2)} wz=${cmd.angular_z.toFixed(2)}`,
           true
         );
+      }
+      if (!r.ok && (r.status === 403 || r.status === 409)) {
+        teleopEnabled = false;
+        setTeleopButton(false);
+        stopTeleopLoop();
+        setStatus("Teleop disabled (lost lease)", false, r.text);
+        return;
       }
     } catch (e) {
       setStatus(
@@ -438,25 +461,57 @@
     }
   }
 
-  function scheduleSend() {
-    if (sending) return;
-    sending = true;
+  function startTeleopLoop() {
+    if (teleopTimer) return;
+    zeroSentAfterStop = false;
 
-    const tick = async () => {
-      const now = Date.now();
-      if (now - lastSendMs >= SEND_PERIOD_MS) {
-        lastSendMs = now;
-        await sendTeleop(latest.lx, latest.ly, latest.rx);
+    teleopTimer = window.setInterval(async () => {
+      if (!teleopEnabled) {
+        // Send exactly one final zero then stop the interval
+        if (!zeroSentAfterStop) {
+          zeroSentAfterStop = true;
+          await sendTeleop(0, 0, 0, true);
+        }
+        stopTeleopLoop();
+        return;
       }
-      // Keep sending while any stick is active (non-zero)
-      if (Math.abs(latest.lx) > 0.01 || Math.abs(latest.ly) > 0.01 || Math.abs(latest.rx) > 0.01) {
-        requestAnimationFrame(tick);
-      } else {
-        sending = false;
-      }
-    };
 
-    requestAnimationFrame(tick);
+      // Enabled: send latest command at fixed rate
+      await sendTeleop(latest.lx, latest.ly, latest.rx, true);
+    }, SEND_PERIOD_MS);
+  }
+
+  function stopTeleopLoop() {
+    if (teleopTimer) {
+      window.clearInterval(teleopTimer);
+      teleopTimer = null;
+    }
+  }
+
+  async function toggleTeleop() {
+    if (!ensureLoggedIn()) return;
+
+    if (!teleopEnabled) {
+      // START: acquire lease
+      const r = await httpPost("/teleop/start");
+      if (!r.ok) {
+        setStatus("Cannot start teleop", false, `HTTP ${r.status}\n${r.text}`);
+        return;
+      }
+      teleopEnabled = true;
+      setTeleopButton(true);
+      startTeleopLoop();
+      setStatus("Teleop ENABLED ✅", true);
+      return;
+    }
+
+    // STOP: release lease + final zero handled server-side too
+    teleopEnabled = false;
+    setTeleopButton(false);
+    stopTeleopLoop();
+
+    const r2 = await httpPost("/teleop/stop");
+    setStatus(r2.ok ? "Teleop DISABLED ✅" : "Teleop stop error", r2.ok, `HTTP ${r2.status}\n${r2.text}`);
   }
 
   // ----------------------------
@@ -558,13 +613,11 @@
   makeJoystick("joyLeft", (x, y, active) => {
     latest.lx = active ? x : 0;
     latest.ly = active ? y : 0;
-    scheduleSend();
   });
 
   makeJoystick("joyRight", (x, y, active) => {
     latest.rx = active ? x : 0;
     latest.ry = active ? y : 0;
-    scheduleSend();
   });
 
 

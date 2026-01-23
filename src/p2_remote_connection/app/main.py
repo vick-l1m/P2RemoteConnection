@@ -8,9 +8,12 @@ from .terminal import terminal_ws
 from fastapi import WebSocket
 
 import os
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Depends, Request
 import hmac
-from fastapi import Depends
+ 
+import time
+import secrets
+from typing import Optional, Dict, Any
 
 # Authentication
 GO2_API_TOKEN = os.getenv("GO2_API_TOKEN", "")
@@ -18,7 +21,7 @@ GO2_API_TOKEN = os.getenv("GO2_API_TOKEN", "")
 if not GO2_API_TOKEN:
     raise RuntimeError("GO2_API_TOKEN is not set")
 
-def require_token(authorization: str = Header(None)):
+def require_token(authorization: str = Header(None)) -> str:
     if not GO2_API_TOKEN:
         raise HTTPException(status_code=500, detail="Server missing GO2_API_TOKEN")
 
@@ -35,6 +38,7 @@ def require_token(authorization: str = Header(None)):
     # constant-time compare (safer)
     if not hmac.compare_digest(token, GO2_API_TOKEN):
         raise HTTPException(status_code=403, detail="Invalid token")
+    return token
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -69,6 +73,14 @@ async def start_action(action: str, _=Depends(require_token)):
 
 
 # Teleop
+
+# --- Teleop lease (single owner) ---
+TELEOP_LEASE_TTL_S = 1.0  # how long before lease expires without messages
+_teleop_owner_token: Optional[str] = None
+_teleop_owner_since: float = 0.0
+_teleop_last_seen: float = 0.0
+_teleop_lease_id: Optional[str] = None  # random id per lease
+
 class TeleopCommand(BaseModel):
     linear_x: float = Field(0.0)
     linear_y: float = Field(0.0)
@@ -80,16 +92,110 @@ MAX_ANG = 1.2
 def clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, v))
 
+def _lease_active(now: float) -> bool:
+    return (_teleop_owner_token is not None) and ((now - _teleop_last_seen) <= TELEOP_LEASE_TTL_S)
+
 @app.post("/teleop")
-async def teleop(cmd: TeleopCommand, _=Depends(require_token)):
+async def teleop(cmd: TeleopCommand, request: Request, _=Depends(require_token)):
+    global _teleop_last_seen, _teleop_owner_token, _teleop_lease_id
+
+    auth = request.headers.get("authorization", "")
+    now = time.time()
+
+    # If no active lease, reject (or allow zeros only — up to you)
+    if not _lease_active(now):
+        # Lease expired -> clear
+        _teleop_owner_token = None
+        _teleop_lease_id = None
+        get_bridge().publish_teleop(0.0, 0.0, 0.0)
+        raise HTTPException(status_code=409, detail="Teleop not started or lease expired")
+
+    if auth != _teleop_owner_token:
+        raise HTTPException(status_code=403, detail="Teleop owned by another client")
+
+    # Refresh lease
+    _teleop_last_seen = now
+
     lx = clamp(cmd.linear_x, -MAX_LIN, MAX_LIN)
     ly = clamp(cmd.linear_y, -MAX_LIN, MAX_LIN)
     az = clamp(cmd.angular_z, -MAX_ANG, MAX_ANG)
 
     get_bridge().publish_teleop(lx, ly, az)
-    return {"ok": True, "linear_x": lx, "linear_y": ly, "angular_z": az}
+    return {"ok": True, "linear_x": lx, "linear_y": ly, "angular_z": az, "lease_id": _teleop_lease_id}
+
 
 # Terminal websocket
 @app.websocket("/ws/terminal")
 async def ws_terminal(websocket: WebSocket):
     await terminal_ws(websocket)
+
+@app.post("/teleop/start")
+async def teleop_start(request: Request, _=Depends(require_token)):
+    global _teleop_owner_token, _teleop_owner_since, _teleop_last_seen, _teleop_lease_id
+
+    auth = request.headers.get("authorization", "")
+    now = time.time()
+
+    if not auth.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+
+    # If someone owns it and it's still active
+    if _lease_active(now):
+        if auth == _teleop_owner_token:
+            # idempotent re-start
+            _teleop_last_seen = now
+            return {"ok": True, "lease_id": _teleop_lease_id, "owner": "you", "active": True}
+
+        raise HTTPException(status_code=409, detail="Teleop already owned by another client")
+
+    # Acquire lease
+    _teleop_owner_token = auth
+    _teleop_owner_since = now
+    _teleop_last_seen = now
+    _teleop_lease_id = secrets.token_urlsafe(8)
+
+    return {"ok": True, "lease_id": _teleop_lease_id, "active": True}
+
+@app.post("/teleop/stop")
+async def teleop_stop(request: Request, _=Depends(require_token)):
+    global _teleop_owner_token, _teleop_owner_since, _teleop_last_seen, _teleop_lease_id
+
+    auth = request.headers.get("authorization", "")
+    now = time.time()
+
+    if not auth.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+
+    # Only the owner can stop; if lease already expired, treat as already stopped
+    if _teleop_owner_token is None or not _lease_active(now):
+        _teleop_owner_token = None
+        _teleop_lease_id = None
+        # send a final stop anyway (safe)
+        get_bridge().publish_teleop(0.0, 0.0, 0.0)
+        return {"ok": True, "stopped": True, "note": "No active lease (already stopped/expired)."}
+
+    if auth != _teleop_owner_token:
+        raise HTTPException(status_code=403, detail="You do not own teleop lease")
+
+    # Final zero + release
+    get_bridge().publish_teleop(0.0, 0.0, 0.0)
+
+    _teleop_owner_token = None
+    _teleop_lease_id = None
+    _teleop_owner_since = 0.0
+    _teleop_last_seen = 0.0
+
+    return {"ok": True, "stopped": True}
+
+@app.get("/teleop/status")
+async def teleop_status():
+    now = time.time()
+    active = _lease_active(now)
+    return {
+        "active": active,
+        "lease_id": _teleop_lease_id if active else None,
+        "ttl_s": TELEOP_LEASE_TTL_S,
+        "age_s": (now - _teleop_owner_since) if active else 0.0,
+        "idle_s": (now - _teleop_last_seen) if active else 0.0,
+    }
+
