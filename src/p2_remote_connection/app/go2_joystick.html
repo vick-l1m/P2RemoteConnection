@@ -56,7 +56,7 @@
       <div style="display:flex; flex-direction:column; gap:10px;">
         <input id="loginBaseUrl" placeholder="http://robot-ip:8000 or https://robot.domain"
                style="padding:10px; border-radius:12px; border:1px solid #ccc; font-size:16px;"
-               value="https://p2dingo-control-backend.p2agentx.com" />
+               value="http://192.168.123.18:8000" />
         <input id="loginToken" placeholder="Password" type="password"
                style="padding:10px; border-radius:12px; border:1px solid #ccc; font-size:16px;" />
         <button onclick="login()" style="padding:12px; border-radius:12px; border:1px solid #ccc; background:#f7f7f7; font-size:16px;">
@@ -124,18 +124,21 @@
   // ----------------------------
   // Auto-config (IMPORTANT)
   // ----------------------------
-  window.addEventListener("DOMContentLoaded", () => {
-    // Use HTTPS domain backend URL
-    const defaultApi = "https://p2dingo-control-backend.p2agentx.com";
+  // window.addEventListener("DOMContentLoaded", () => {
+  //   // Use EC2 backend URL
+  //   const defaultApi = "http://54.66.38.113:8000";
+  //   //// Use HTTPS domain backend URL
+  //   // const defaultApi = "https://p2dingo-control-backend.p2agentx.com";
 
-    const base = document.getElementById("baseUrl");
-    if (!base.value || base.value.trim() === "" || base.value.includes("192.168.123.18") || base.value.includes("localhost")) {
-      base.value = defaultApi;
-    }
+  //   const base = document.getElementById("baseUrl");
+  //   if (!base.value || base.value.trim() === "" || base.value.includes("192.168.123.18") || base.value.includes("localhost")) {
+  //     base.value = defaultApi;
+  //   }
 
-    document.getElementById("uiHost").textContent = location.origin;
-    document.getElementById("apiHost").textContent = base.value;
-  });
+  //   document.getElementById("uiHost").textContent = location.origin;
+  //   document.getElementById("apiHost").textContent = base.value;
+  // });
+  
 
   // ----------------------------
   // Authentication
@@ -193,6 +196,16 @@
     localStorage.removeItem(LS_TOKEN_KEY);
   }
 
+  function ensureLoggedIn() {
+    if (!ROBOT_BASE_URL || !AUTH_TOKEN) {
+      const msg = document.getElementById("loginMsg");
+      if (msg) msg.textContent = "Please log in.";
+      lockUI();
+      return false;
+    }
+    return true;
+  }
+
   async function login() {
     const msg = document.getElementById("loginMsg");
     msg.textContent = "";
@@ -206,34 +219,41 @@
       return;
     }
 
-    // Set globals for httpGet/authHeaders/baseUrl()
+    // ✅ SET FIRST
     ROBOT_BASE_URL = url;
     AUTH_TOKEN = token;
 
+    // ✅ THEN reflect in UI
+    document.getElementById("baseUrl").value = ROBOT_BASE_URL;
+    document.getElementById("apiHost").textContent = ROBOT_BASE_URL;
+
     try {
-      // Validate token by calling protected endpoint
+      console.log("LOGIN baseUrl() =", baseUrl());
+
       const r = await httpGet("/health");
 
       if (!r.ok) {
-        // invalid / missing / bad format -> force re-login
-        msg.textContent = "Invalid token. Please try again.";
+        if (r.status === 401 || r.status === 403) {
+          msg.textContent = "Incorrect token entered.";
+        } else {
+          msg.textContent = `Login failed (HTTP ${r.status})`;
+        }
         AUTH_TOKEN = "";
         clearAuth();
         lockUI();
-        document.getElementById("loginToken").focus();
         return;
       }
 
-      // Success
+      // ✅ Success
       saveAuth();
       unlockUI();
       setStatus("Unlocked ✅", true);
       await refreshSafetyStatus();
 
     } catch (e) {
-      msg.textContent = "Cannot reach robot API. Check URL/network.";
-      AUTH_TOKEN = "";
-      clearAuth();
+      console.error("LOGIN ERROR:", e);
+      msg.textContent = "Login error: " + (e?.message || String(e));
+      // DON'T clear token here (this might be a JS bug, not network)
       lockUI();
     }
   }
@@ -258,8 +278,14 @@
   }
 
   window.addEventListener("DOMContentLoaded", async () => {
-    // Use HTTPS domain backend URL
-    const defaultApi = "https://p2dingo-control-backend.p2agentx.com";
+    // // Use HTTPS domain backend URL
+    // const defaultApi = "https://p2dingo-control-backend.p2agentx.com";
+    // Use EC2 backend URL
+    const defaultApi = "http://192.168.123.18:8000";
+    document.getElementById("loginBaseUrl").value = defaultApi;
+    document.getElementById("baseUrl").value = defaultApi;
+    document.getElementById("apiHost").textContent = defaultApi;
+
 
     const base = document.getElementById("baseUrl");
     if (!base.value || base.value.trim() === "" || base.value.includes("localhost")) base.value = defaultApi;
@@ -323,6 +349,7 @@
     }
     const url = baseUrl() + path;
     const r = await fetch(url, { headers: authHeaders() });
+    console.log("GET", url);
 
     if (r.status === 401 || r.status === 403) {
       AUTH_TOKEN = "";

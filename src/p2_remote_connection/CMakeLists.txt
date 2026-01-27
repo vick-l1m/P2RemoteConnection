@@ -18,12 +18,16 @@ find_package(std_msgs REQUIRED)
 find_package(unitree_api REQUIRED)
 find_package(unitree_go REQUIRED)
 
-include_directories(include)
-
 add_executable(web_teleop_bridge
   src/web_teleop_bridge.cpp
   src/common/ros2_sport_client.cpp
 )
+
+target_include_directories(web_teleop_bridge PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/p2_remote_connection
+)
+
 ament_target_dependencies(web_teleop_bridge
   rclcpp
   geometry_msgs
