@@ -87,7 +87,6 @@ async def start_action(action: str, _=Depends(require_token)):
 async def safety_stop(_=Depends(require_token)):
     global STOP_LATCHED
     STOP_LATCHED = True
-    get_bridge().publish_teleop(0.0, 0.0, 0.0)
     get_bridge().publish_action("stop")
     return {"ok": True, "stop_latched": True}
 
@@ -139,7 +138,6 @@ async def teleop(cmd: TeleopCommand, request: Request, _=Depends(require_token))
         # Lease expired -> clear
         _teleop_owner_token = None
         _teleop_lease_id = None
-        get_bridge().publish_teleop(0.0, 0.0, 0.0)
         raise HTTPException(status_code=409, detail="Teleop not started or lease expired")
 
     if auth != _teleop_owner_token:
@@ -189,6 +187,7 @@ async def teleop_start(request: Request, _=Depends(require_token)):
     _teleop_last_seen = now
     _teleop_lease_id = secrets.token_urlsafe(8)
 
+    get_bridge().publish_action("teleop_start")
     return {"ok": True, "lease_id": _teleop_lease_id, "active": True}
 
 @app.post("/teleop/stop")
@@ -213,21 +212,17 @@ async def teleop_stop(request: Request, _=Depends(require_token)):
     if _teleop_owner_token is None or not _lease_active(now):
         _teleop_owner_token = None
         _teleop_lease_id = None
-        # send a final stop anyway (safe)
-        get_bridge().publish_teleop(0.0, 0.0, 0.0)
         return {"ok": True, "stopped": True, "note": "No active lease (already stopped/expired)."}
 
     if auth != _teleop_owner_token:
         raise HTTPException(status_code=403, detail="You do not own teleop lease")
-
-    # Final zero + release
-    get_bridge().publish_teleop(0.0, 0.0, 0.0)
 
     _teleop_owner_token = None
     _teleop_lease_id = None
     _teleop_owner_since = 0.0
     _teleop_last_seen = 0.0
 
+    get_bridge().publish_action("teleop_stop")
     return {"ok": True, "stopped": True}
 
 @app.get("/teleop/status")
