@@ -421,44 +421,44 @@
   }
 
   // ----------------------------
-// Safety STOP/RESUME toggle
-// ----------------------------
-let stopLatched = false;  // UI copy of backend state
-
-function setSafetyButton(latched) {
-  const btn = document.getElementById("safetyToggleBtn");
-  if (!btn) return;
-
-  stopLatched = !!latched;
-
-  if (stopLatched) {
-    btn.textContent = "RESUME";
-    btn.classList.remove("danger");     // make resume look "normal"
-  } else {
-    btn.textContent = "STOP";
-    btn.classList.add("danger");        // make stop look dangerous
-  }
-}
-
-async function refreshSafetyStatus() {
-  if (!ensureLoggedIn()) return;
-
-  const r = await httpGet("/safety/status");
-  setStatus(
-    r.ok ? "Safety status ✅" : `Safety status failed (HTTP ${r.status})`,
-    r.ok,
-    `URL: ${r.url}\n${r.text}`
-  );
-
-  if (r.ok) {
-    try {
-      const data = JSON.parse(r.text);
-      setSafetyButton(!!data.stop_latched);
-    } catch (_) {
-      // ignore parse errors; keep current UI
+  // Safety STOP/RESUME toggle
+  // ----------------------------
+  let stopLatched = false;  // UI copy of backend state
+  
+  function setSafetyButton(latched) {
+    const btn = document.getElementById("safetyToggleBtn");
+    if (!btn) return;
+  
+    stopLatched = !!latched;
+  
+    if (stopLatched) {
+      btn.textContent = "RESUME";
+      btn.classList.remove("danger");     // make resume look "normal"
+    } else {
+      btn.textContent = "STOP";
+      btn.classList.add("danger");        // make stop look dangerous
     }
   }
-}
+  
+  async function refreshSafetyStatus() {
+    if (!ensureLoggedIn()) return;
+  
+    const r = await httpGet("/safety/status");
+    setStatus(
+      r.ok ? "Safety status ✅" : `Safety status failed (HTTP ${r.status})`,
+      r.ok,
+      `URL: ${r.url}\n${r.text}`
+    );
+  
+    if (r.ok) {
+      try {
+        const data = JSON.parse(r.text);
+        setSafetyButton(!!data.stop_latched);
+      } catch (_) {
+        // ignore parse errors; keep current UI
+      }
+    }
+  }
 
   async function toggleSafety() {
     if (!ensureLoggedIn()) return;

@@ -3,6 +3,7 @@
 #include <mutex>
 #include <atomic>
 #include <cmath>
+#include <algorithm> 
 
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/twist.hpp"
@@ -83,7 +84,7 @@ private:
 
   // -------------------- Main loop --------------------
   void tick() {
-    const auto now_t = now();
+    const auto now_t = this->now();
     double vx, vy, vyaw;
 
     {
@@ -91,17 +92,24 @@ private:
       vx = latest_vx_;
       vy = latest_vy_;
       vyaw = latest_vyaw_;
+      last_rx = last_rx_time_;
     }
 
     auto dz = [](double v) {
       return (std::abs(v) < DEADBAND) ? 0.0 : v;
     };
-
     vx = dz(vx);
     vy = dz(vy);
     vyaw = dz(vyaw);
 
     const bool timed_out = (now_t - last_rx_time_).seconds() > RX_TIMEOUT;
+    // If timed out, force command to zero BUT still publish Move every tick
+    if (timed_out) {
+      vx = 0.0;
+      vy = 0.0;
+      vyaw = 0.0;
+    }
+
     const bool stationary =
       std::abs(vx) < 1e-6 &&
       std::abs(vy) < 1e-6 &&
@@ -109,15 +117,13 @@ private:
 
     const bool active_now = !timed_out && !stationary;
 
-if (!active_now) {
-  if (was_active_) {
-    sportClient_.StopMove(req_);
-    was_active_ = false;
-  }
-  return;
-}
+    if (!active_now && was_active_) {
+      sportClient_.StopMove(req_);
+      was_active_ = false;
+    } else if (active_now) {
+      was_active_ = true;
+    }
 
-    was_active_ = true;
     sportClient_.Move(
       req_,
       static_cast<float>(VX_SCALE * vx),
