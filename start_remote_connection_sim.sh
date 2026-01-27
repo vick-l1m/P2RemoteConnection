@@ -14,7 +14,6 @@ if [ "$(whoami)" = "unitree" ] && [ -d "/home/unitree" ]; then
   export HOME="/home/unitree"
 fi
 
-
 pids=()
 
 cleanup() {
@@ -34,25 +33,38 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+ok_or_die() {
+  local name="$1"
+  local pid="$2"
+  if ! kill -0 "$pid" 2>/dev/null; then
+    echo "[run_all] Error occurred ❌ ($name failed to start)"
+    cleanup
+    exit 1
+  fi
+}
+
 echo "[run_all] Workspace: $WS_DIR"
 
-# --- Source ROS + Unitree stack safely ---
+# --- Source ROS safely ---
 set +u
 
-# 1) ROS 2 Humble
-source /opt/ros/humble/setup.bash
+# 0) Change to fast rtps
+use_fastrtps
 
-# 2) Unitree environment (IMPORTANT on Go2)
-# Use whichever exists on your system:
-# if [ -f "$HOME/unitree_ros2/install/setup.sh" ]; then
-#   echo "[run_all] Sourcing Unitree env: $HOME/unitree_ros2/install/setup.sh"
-#   source "$HOME/unitree_ros2/install/setup.sh"
-# elif [ -f "$HOME/unitree_ros2/install/setup.bash" ]; then
-#   echo "[run_all] Sourcing Unitree env: $HOME/unitree_ros2/install/setup.bash"
-#   source "$HOME/unitree_ros2/install/setup.bash"
-# else
-#   echo "[run_all] WARNING: Unitree env not found at $HOME/unitree_ros2/install/setup.(sh|bash)"
-# fi
+# 1) Source ROS 2 environment (Humble preferred, fallback to Foxy)
+if [ -f /opt/ros/humble/setup.bash ]; then
+  echo "[env] Sourcing ROS 2 Humble"
+  source /opt/ros/humble/setup.bash
+elif [ -f /opt/ros/foxy/setup.bash ]; then
+  echo "[env] Sourcing ROS 2 Foxy"
+  source /opt/ros/foxy/setup.bash
+else
+  echo "[env] ❌ No ROS 2 setup.bash found in /opt/ros"
+  exit 1
+fi
+
+# 2) Unitree env: (SIM) intentionally not sourced
+# (keep your sim-unique behavior)
 
 # 3) Your overlay (P2RemoteConnection)
 if [ -f "$WS_DIR/install/setup.bash" ]; then
@@ -64,28 +76,39 @@ fi
 
 set -u
 
-# --- Make runtime deterministic under systemd ---
-export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
-# export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}"
-# --- SIM: avoid CycloneDDS interface pinning issues ---
+# --- SIM: avoid CycloneDDS interface pinning issues (KEEP) ---
 unset CYCLONEDDS_URI
 export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 
-# If you have a CycloneDDS config file, set it explicitly (optional)
-# export CYCLONEDDS_URI="file://$HOME/unitree_ros2/cyclonedds.xml"
+# ----------------------------
+# Load Go2 API token (NEW - same as Go2)
+# ----------------------------
+if [ -f "$HOME/.go2_token" ]; then
+  export GO2_API_TOKEN="$(cat "$HOME/.go2_token")"
+else
+  echo "[run_all] ❌ ERROR: ~/.go2_token not found"
+  exit 1
+fi
+echo "[run_all] GO2_API_TOKEN loaded"
 
 # 1) Start FastAPI backend
 echo "[run_all] Starting FastAPI (uvicorn) on :$API_PORT ..."
-cd "$WS_DIR/src/p2_remote_connection"
+cd "$PKG_DIR"
 python3 -m uvicorn app.main:app --host "$API_HOST" --port "$API_PORT" &
-pids+=("$!")
+API_PID=$!
+pids+=("$API_PID")
+
+sleep 0.5
+ok_or_die "FastAPI" "$API_PID"
 
 # 2) Start static file server for frontend
 echo "[run_all] Starting http.server on :$UI_PORT ..."
 python3 -m http.server "$UI_PORT" &
-pids+=("$!")
+UI_PID=$!
+pids+=("$UI_PID")
 
-# 3) Wait for Go2 driver before starting bridge (prevents “no motion after boot”)
+# 3) Wait for Go2 driver before starting bridge (KEEP)
 echo "[run_all] Waiting for /go2_driver_node..."
 for i in {1..30}; do
   if ros2 node list 2>/dev/null | grep -q "^/go2_driver_node$"; then
@@ -101,13 +124,19 @@ SIM_BRIDGE_BIN="$WS_DIR/install/p2_remote_connection/lib/p2_remote_connection/we
 if [ -x "$SIM_BRIDGE_BIN" ]; then
   echo "[run_all] Starting SIM bridge: $SIM_BRIDGE_BIN"
   "$SIM_BRIDGE_BIN" --ros-args -p robot_index:=0 &
-  pids+=("$!")
+  SIM_BRIDGE_PID=$!
+  pids+=("$SIM_BRIDGE_PID")
 else
   echo "[run_all] Starting SIM bridge via ros2 run (fallback)"
   cd "$WS_DIR"
   ros2 run p2_remote_connection web_teleop_bridge_sim --ros-args -p robot_index:=0 &
-  pids+=("$!")
+  SIM_BRIDGE_PID=$!
+  pids+=("$SIM_BRIDGE_PID")
 fi
+
+sleep 0.5
+ok_or_die "UI server" "$UI_PID"
+ok_or_die "SIM bridge" "$SIM_BRIDGE_PID"
 
 echo ""
 echo "[run_all] ✅ All started."
@@ -119,4 +148,3 @@ echo ""
 wait -n
 echo "[run_all] A process exited; shutting down..."
 exit 0
-

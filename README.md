@@ -14,16 +14,19 @@ It’s designed for quick experiments: phone → HTTP → Go2 command.
 
 ### 1. Clone this workspace
 ```bash
+  mkdir p2_ws
+  cd p2_ws
   git clone https://github.com/vick-l1m/P2RemoteConnection.git
 ```
 
 On the Go2 (or the device running the server)
 ```bash
-cd ~/P2RemoteConnection/src/p2_remote_connection
+cd ~/p2_ws/P2RemoteConnection/src/p2_remote_connection
 pip3 install fastapi uvicorn
+
 pip install -r requirements.txt
 source ~/unitree_ros2/install/setup.sh
-cd ~/P2RemoteConnection
+cd ~/p2_ws/P2RemoteConnection
 colcon build
 source install/setup.bash
 ```
@@ -45,7 +48,7 @@ This token will be used to ensure security and that each Go2 has a unique id.
 ### 3. Launch the backend and ros2 node
 Make the command runnable and launch:
 ```bash
-cd ~/P2RemoteConnection
+cd ~/p2_ws/P2RemoteConnection
 chmod +x start_remote_connection.sh
 ./start_remote_connection.sh
 ```
@@ -53,7 +56,7 @@ chmod +x start_remote_connection.sh
 To run on the Issac Sim:
 ```bash
 use_fastrtps
-cd ~/P2RemoteConnection
+cd ~/p2_ws/P2RemoteConnection
 chmod +x start_remote_connection_humble.sh
 ./start_remote_connection_humble.sh
 ```
