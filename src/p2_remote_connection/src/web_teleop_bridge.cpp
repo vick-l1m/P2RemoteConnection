@@ -88,7 +88,7 @@ private:
       // stop and exit upright-walk mode
       sportClient_.StopMove(req_);
       sportClient_.WalkUpright(req_, false);
-      
+
       // sit down
       sportClient_.StandDown(req_);
     }
@@ -110,6 +110,7 @@ private:
     const auto now_t = this->now();
     double vx, vy, vyaw;
 
+    rclcpp::Time last_rx;
     {
       std::lock_guard<std::mutex> lk(mtx_);
       vx = latest_vx_;
@@ -125,7 +126,7 @@ private:
     vy = dz(vy);
     vyaw = dz(vyaw);
 
-    const bool timed_out = (now_t - last_rx_time_).seconds() > RX_TIMEOUT;
+    const bool timed_out = (now_t - last_rx).seconds() > RX_TIMEOUT;
     // If timed out, force command to zero BUT still publish Move every tick
     if (timed_out) {
       vx = 0.0;
