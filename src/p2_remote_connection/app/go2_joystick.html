@@ -36,6 +36,24 @@
       overflow: auto;       /* allow wheel/touch events naturally */
       touch-action: pan-y;  /* enable vertical scrolling on touch devices */
     }
+    /* Multi-terminal responsive layout */
+    .termGrid {
+      margin-top: 12px;
+      display: grid;
+      gap: 12px;
+      grid-template-columns: 1fr;
+    }
+
+    /* 2 columns when medium width */
+    @media (min-width: 980px) {
+      .termGrid { grid-template-columns: 1fr 1fr; }
+    }
+
+    /* 3 columns when wide */
+    @media (min-width: 1300px) {
+      .termGrid { grid-template-columns: 1fr 1fr 1fr; }
+    }
+
 
 
   </style>
@@ -79,7 +97,9 @@
         <button onclick="postAction('stand')">Stand</button>
         <button onclick="postAction('sit')">Sit</button>
         <button id="safetyToggleBtn" class="danger" onclick="toggleSafety()">STOP</button>
-        <button onclick="toggleTerminal()">Terminal</button>
+        <button id="termBtn1" onclick="toggleTerminalN(1)">Terminal 1</button>
+        <button id="termBtn2" onclick="toggleTerminalN(2)">Terminal 2</button>
+        <button id="termBtn3" onclick="toggleTerminalN(3)">Terminal 3</button>
         <button onclick="logout()">Logout</button>
       </div>
 
@@ -99,13 +119,33 @@
         </div>
       </div>
 
-      <div id="terminalPanel" class="termPanel" style="display:none;">
-        <div class="termHeader">
-          <div class="termTitle">Remote Terminal</div>
-          <div class="termHint small">Tip: terminal connects to API (:8000)</div>
+      <div id="terminalsWrap" class="termGrid" style="display:none;">
+        <div id="terminalPanel1" class="termPanel" style="display:none;">
+          <div class="termHeader">
+            <div class="termTitle">Remote Terminal 1</div>
+            <div class="termHint small">API (:8000)</div>
+          </div>
+          <div id="terminal1" class="termBox"></div>
         </div>
-        <div id="terminal" class="termBox"></div>
+      
+        <div id="terminalPanel2" class="termPanel" style="display:none;">
+          <div class="termHeader">
+            <div class="termTitle">Remote Terminal 2</div>
+            <div class="termHint small">API (:8000)</div>
+          </div>
+          <div id="terminal2" class="termBox"></div>
+        </div>
+      
+        <div id="terminalPanel3" class="termPanel" style="display:none;">
+          <div class="termHeader">
+            <div class="termTitle">Remote Terminal 3</div>
+            <div class="termHint small">API (:8000)</div>
+          </div>
+          <div id="terminal3" class="termBox"></div>
+        </div>
       </div>
+
+
 
       <div class="status">
         <div id="msg" class="small">Ready.</div>
@@ -424,13 +464,13 @@
   // Safety STOP/RESUME toggle
   // ----------------------------
   let stopLatched = false;  // UI copy of backend state
-  
+
   function setSafetyButton(latched) {
     const btn = document.getElementById("safetyToggleBtn");
     if (!btn) return;
-  
+
     stopLatched = !!latched;
-  
+
     if (stopLatched) {
       btn.textContent = "RESUME";
       btn.classList.remove("danger");     // make resume look "normal"
@@ -439,17 +479,17 @@
       btn.classList.add("danger");        // make stop look dangerous
     }
   }
-  
+
   async function refreshSafetyStatus() {
     if (!ensureLoggedIn()) return;
-  
+
     const r = await httpGet("/safety/status");
     setStatus(
       r.ok ? "Safety status ✅" : `Safety status failed (HTTP ${r.status})`,
       r.ok,
       `URL: ${r.url}\n${r.text}`
     );
-  
+
     if (r.ok) {
       try {
         const data = JSON.parse(r.text);
@@ -684,15 +724,14 @@
     sendTeleop(latest.lx, latest.ly, latest.rx, true);
   }, SEND_PERIOD_MS);
 
-
   // ----------------------------
-  // Terminal (xterm.js) with fit + autoscroll + resize
+  // Terminal(s) (xterm.js) with fit + autoscroll + resize
   // ----------------------------
-  let term = null;
-  let fitAddon = null;
-  let ws = null;
-  let termOpen = false;
-  let resizeObserver = null;
+  const terminals = {
+    1: { term: null, fit: null, ws: null, open: false, ro: null, follow: true },
+    2: { term: null, fit: null, ws: null, open: false, ro: null, follow: true },
+    3: { term: null, fit: null, ws: null, open: false, ro: null, follow: true },
+  };
 
   function apiWsBase() {
     const api = baseUrl();               // e.g. http://192.168.123.18:8000
@@ -701,133 +740,184 @@
     return `${wsProto}://${u.host}`;
   }
 
-  function ensureTerminalStarted() {
-    if (term) return;
+  function isNearBottom(t, threshold = 2) {
+    return (t.buffer.active.length - (t.buffer.active.viewportY + t.rows)) <= threshold;
+  }
 
-    const container = document.getElementById("terminal");
+  function updateFollowFlag(n) {
+    const st = terminals[n];
+    if (!st.term) return;
+    st.follow = isNearBottom(st.term);
+  }
 
-    term = new Terminal({
+  function sendTermResize(n) {
+    const st = terminals[n];
+    if (!st.term || !st.ws || st.ws.readyState !== WebSocket.OPEN) return;
+    st.ws.send(JSON.stringify({ resize: { cols: st.term.cols, rows: st.term.rows } }));
+  }
+
+  function anyTerminalOpen() {
+    return terminals[1].open || terminals[2].open || terminals[3].open;
+  }
+
+  function updateTerminalsWrapVisibility() {
+    const wrap = document.getElementById("terminalsWrap");
+    wrap.style.display = anyTerminalOpen() ? "grid" : "none";
+  }
+
+  function destroyTerminal(n) {
+    const st = terminals[n];
+
+    // Close ws
+    try { if (st.ws && st.ws.readyState === WebSocket.OPEN) st.ws.close(); } catch (_) {}
+    st.ws = null;
+
+    // Resize observer
+    try { if (st.ro) st.ro.disconnect(); } catch (_) {}
+    st.ro = null;
+
+    // Dispose terminal
+    try { if (st.term) st.term.dispose(); } catch (_) {}
+    st.term = null;
+    st.fit = null;
+
+    // Clear DOM container
+    const container = document.getElementById(`terminal${n}`);
+    if (container) container.innerHTML = "";
+
+    st.open = false;
+    st.follow = true;
+
+    // Hide panel
+    const panel = document.getElementById(`terminalPanel${n}`);
+    if (panel) panel.style.display = "none";
+
+    updateTerminalsWrapVisibility();
+  }
+
+  function ensureTerminalStarted(n) {
+    const st = terminals[n];
+    if (st.term) return;
+
+    const container = document.getElementById(`terminal${n}`);
+
+    st.term = new Terminal({
       cursorBlink: true,
       fontSize: 14,
       convertEol: true,
       scrollback: 5000,
       scrollOnUserInput: true,
       scrollOnOutput: true,
-
       theme: { background: "#0f0f0f" }
     });
 
-    fitAddon = new FitAddon.FitAddon();
-    term.loadAddon(fitAddon);
+    st.fit = new FitAddon.FitAddon();
+    st.term.loadAddon(st.fit);
 
-    term.open(container);
-    fitAddon.fit(); // IMPORTANT: sets term.cols/term.rows correctly
+    st.term.open(container);
+    st.fit.fit();
 
     // Allow user scroll (mouse wheel / touchpad)
-    container.addEventListener("wheel", () => {
-      // after a wheel scroll, decide whether we should keep following output
-      setTimeout(updateFollowFlag, 0);
-    }, { passive: true });
-
-    // Also catch touch scrolling on mobile
-    container.addEventListener("touchmove", () => {
-      setTimeout(updateFollowFlag, 0);
-    }, { passive: true });
+    container.addEventListener("wheel", () => setTimeout(() => updateFollowFlag(n), 0), { passive: true });
+    container.addEventListener("touchmove", () => setTimeout(() => updateFollowFlag(n), 0), { passive: true });
 
     if (!AUTH_TOKEN) {
-      term.write("\r\n[Login required]\r\n");
+      st.term.write("\r\n[Login required]\r\n");
       return;
     }
 
-    ws = new WebSocket(`${apiWsBase()}/ws/terminal?token=${encodeURIComponent(AUTH_TOKEN)}`);
+    st.ws = new WebSocket(`${apiWsBase()}/ws/terminal?token=${encodeURIComponent(AUTH_TOKEN)}`);
 
-    ws.onopen = () => {
-      term.write("\r\n[Connected to Go2 terminal]\r\n", () => {
-        const wasFollowing = followOutput;
-        fitAddon.fit();
-        sendTermResize();
-        if (wasFollowing) term.scrollToBottom();
-        updateFollowFlag();
-        term.focus();
+    st.ws.onopen = () => {
+      st.term.write(`\r\n[Connected to Go2 terminal ${n}]\r\n`, () => {
+        const wasFollowing = st.follow;
+        st.fit.fit();
+        sendTermResize(n);
+        if (wasFollowing) st.term.scrollToBottom();
+        updateFollowFlag(n);
+        st.term.focus();
       });
     };
 
-
-    ws.onmessage = (e) => {
-      const shouldFollow = followOutput;
-      term.write(e.data, () => {
-        if (shouldFollow) term.scrollToBottom();
-        updateFollowFlag();
+    st.ws.onmessage = (e) => {
+      const shouldFollow = st.follow;
+      st.term.write(e.data, () => {
+        if (shouldFollow) st.term.scrollToBottom();
+        updateFollowFlag(n);
       });
     };
 
+    st.ws.onclose = () => st.term && st.term.write("\r\n[Terminal disconnected]\r\n");
+    st.ws.onerror = () => st.term && st.term.write("\r\n[Terminal error]\r\n");
 
-    ws.onclose = () => term.write("\r\n[Terminal disconnected]\r\n");
-    ws.onerror = () => term.write("\r\n[Terminal error]\r\n");
-
-    term.onData((data) => {
-      if (ws && ws.readyState === WebSocket.OPEN) ws.send(data);
-      // if user types, we assume they want to be at bottom
-      followOutput = true;
-      term.scrollToBottom();
-      updateFollowFlag();
+    st.term.onData((data) => {
+      if (st.ws && st.ws.readyState === WebSocket.OPEN) st.ws.send(data);
+      st.follow = true;
+      st.term.scrollToBottom();
+      updateFollowFlag(n);
     });
 
-    resizeObserver = new ResizeObserver(() => {
-      window.clearTimeout(window.__termResizeT);
-      window.__termResizeT = window.setTimeout(() => {
-        if (!fitAddon || !term) return;
+    // Resize observer per terminal container
+    st.ro = new ResizeObserver(() => {
+      window.clearTimeout(window[`__termResizeT${n}`]);
+      window[`__termResizeT${n}`] = window.setTimeout(() => {
+        if (!st.fit || !st.term) return;
 
-        const wasFollowing = followOutput;
+        const wasFollowing = st.follow;
 
-        fitAddon.fit();
-        sendTermResize();
+        st.fit.fit();
+        sendTermResize(n);
 
-        if (wasFollowing) term.scrollToBottom();
-        updateFollowFlag();
+        if (wasFollowing) st.term.scrollToBottom();
+        updateFollowFlag(n);
       }, 50);
     });
-    resizeObserver.observe(container);
+    st.ro.observe(container);
   }
 
-  function toggleTerminal() {
-    const panel = document.getElementById("terminalPanel");
-    termOpen = !termOpen;
-    panel.style.display = termOpen ? "block" : "none";
+  function openTerminal(n) {
+    if (!ensureLoggedIn()) return;
 
-    if (termOpen) {
-      ensureTerminalStarted();
-      setTimeout(() => {
-        if (!term) return;
+    const panel = document.getElementById(`terminalPanel${n}`);
+    panel.style.display = "block";
+    terminals[n].open = true;
 
-        const wasFollowing = followOutput;
+    updateTerminalsWrapVisibility();
+    ensureTerminalStarted(n);
 
-        if (fitAddon) fitAddon.fit();
-        sendTermResize();
+    // after layout, fit + resize
+    setTimeout(() => {
+      const st = terminals[n];
+      if (!st.term) return;
 
-        if (wasFollowing) term.scrollToBottom();
-        updateFollowFlag();
+      const wasFollowing = st.follow;
+      if (st.fit) st.fit.fit();
+      sendTermResize(n);
+      if (wasFollowing) st.term.scrollToBottom();
+      updateFollowFlag(n);
+      st.term.focus();
+    }, 150);
+  }
 
-        term.focus();
-      }, 150);
+  function toggleTerminalN(n) {
+    // Safety: STOP latched disables terminals (match your old behavior)
+    if (!COMMS_ENABLED) {
+      setStatus("STOP latched 🔒", false, "Terminals are closed while STOP is latched. Press RESUME.");
+      return;
     }
+
+    const st = terminals[n];
+    if (st.open) {
+      destroyTerminal(n);
+      return;
+    }
+    openTerminal(n);
   }
 
-  function sendTermResize() {
-    if (!term || !ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ resize: { cols: term.cols, rows: term.rows } }));
-  }
-
-  function isNearBottom(t, threshold = 2) {
-    // If user is within `threshold` lines from bottom, treat as "at bottom"
-    return (t.buffer.active.length - (t.buffer.active.viewportY + t.rows)) <= threshold;
-  }
-
-  let followOutput = true; // we follow output unless user scrolls up
-
-  function updateFollowFlag() {
-    if (!term) return;
-    followOutput = isNearBottom(term);
+  function closeAllTerminals() {
+    destroyTerminal(1);
+    destroyTerminal(2);
+    destroyTerminal(3);
   }
 
   </script>

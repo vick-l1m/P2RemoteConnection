@@ -75,9 +75,21 @@ private:
     const auto &a = msg->data;
 
     if (a == "stand") {
+      // stop any residual motion first
+      sportClient_.StopMove(req_);
+
+      // stand up
       sportClient_.StandUp(req_);
+
+      // IMPORTANT: re-enter velocity-control mode
+      sportClient_.WalkUpright(req_, true);
     } 
     else if (a == "sit") {
+      // stop and exit upright-walk mode
+      sportClient_.StopMove(req_);
+      sportClient_.WalkUpright(req_, false);
+      
+      // sit down
       sportClient_.StandDown(req_);
     }
   }
