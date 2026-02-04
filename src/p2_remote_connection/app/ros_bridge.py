@@ -14,6 +14,7 @@ from std_msgs.msg import String
 from nav_msgs.msg import OccupancyGrid
 from map_msgs.msg import OccupancyGridUpdate
 from fastapi import WebSocket
+from std_msgs.msg import Bool
 
 
 @dataclass

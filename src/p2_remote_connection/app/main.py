@@ -154,6 +154,11 @@ async def teleop(cmd: TeleopCommand, request: Request, _=Depends(require_token))
 
 
 # Terminal websocket
+@app.websocket("/ws/terminal")
+async def ws_terminal(websocket: WebSocket):
+    await terminal_ws(websocket)
+
+# Map2D endpoints
 @app.get("/map2d/full")
 async def map2d_full(_=Depends(require_token)):
     store = get_map_store()
