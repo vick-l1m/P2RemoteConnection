@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Dict
 from fastapi import FastAPI, HTTPException
@@ -13,6 +14,12 @@ import hmac
 import time
 import secrets
 from typing import Optional, Dict, Any
+
+import json
+import gzip
+from fastapi.responses import Response
+from app.ros_bridge import get_map_store
+
 
 # Conditional import: use terminal_ec2 for EC2 deployment, terminal for robot
 if os.getenv("DEPLOYMENT_ENV") == "ec2":
@@ -62,6 +69,8 @@ app.add_middleware(
 @app.on_event("startup")
 async def on_startup():
     start_ros_bridge()
+    # give ROS bridge the running asyncio loop so it can broadcast map updates
+    get_bridge().set_asyncio_loop(asyncio.get_running_loop())
 
 @app.get("/health")
 async def health(_=Depends(require_token)):
@@ -134,7 +143,82 @@ async def teleop(cmd: TeleopCommand, request: Request, _=Depends(require_token))
 
 
 # Terminal websocket
-@app.websocket("/ws/terminal")
-async def ws_terminal(websocket: WebSocket):
-    await terminal_ws(websocket)
+@app.get("/map2d/full")
+async def map2d_full(_=Depends(require_token)):
+    store = get_map_store()
+    async with store.lock:
+        if store.meta is None or store.full_raw is None:
+            return Response(status_code=204)
+
+        meta = store.meta
+        gz = gzip.compress(store.full_raw, compresslevel=6)
+
+        headers = {
+            "X-Map-Frame": meta["frame_id"],
+            "X-Map-Resolution": str(meta["resolution"]),
+            "X-Map-Width": str(meta["width"]),
+            "X-Map-Height": str(meta["height"]),
+            "X-Map-Origin-X": str(meta["origin_x"]),
+            "X-Map-Origin-Y": str(meta["origin_y"]),
+            "X-Map-Seq": str(store.seq),
+            "Content-Encoding": "gzip",
+            "Content-Type": "application/octet-stream",
+        }
+        return Response(content=gz, headers=headers)
+
+@app.websocket("/ws/map2d")
+async def ws_map2d(websocket: WebSocket):
+    # Authenticate BEFORE accept (same style as terminal.py)
+    token = websocket.query_params.get("token", "")
+
+    if not GO2_API_TOKEN:
+        await websocket.close(code=1011)
+        return
+
+    if not hmac.compare_digest(token, GO2_API_TOKEN):
+        await websocket.close(code=1008)
+        return
+
+    await websocket.accept()
+
+    # Optional: if STOP latched, immediately refuse (client will reconnect on RESUME)
+    if STOP_LATCHED:
+        await websocket.close(code=1013)  # Try again later
+        return
+
+    store = get_map_store()
+
+    # Register client
+    async with store.lock:
+        store.clients.add(websocket)
+
+        # Send latest full map immediately if available
+        initial = None
+        if store.meta is not None and store.full_raw is not None:
+            initial = {
+                "t": "f",
+                "seq": store.seq,
+                "meta": store.meta,
+                "gz": gzip.compress(store.full_raw, compresslevel=6),
+            }
+
+    try:
+        if initial:
+            header = initial.copy()
+            gz = header.pop("gz")
+            await websocket.send_text(json.dumps(header))
+            await websocket.send_bytes(gz)
+
+        # Keepalive loop (client sends "ping")
+        while True:
+            _ = await websocket.receive_text()
+            if STOP_LATCHED:
+                await websocket.close(code=1013)
+                return
+
+    except Exception:
+        pass
+    finally:
+        async with store.lock:
+            store.clients.discard(websocket)
 
