@@ -7,12 +7,9 @@ Creating a web access interface to connect to Go2 functions.
 This project runs a small FastAPI server on the Unitree Go2 (or a machine with the same ROS 2/Unitree environment)
 and exposes **HTTP endpoints** that trigger a **whitelisted set of shell commands**.
 
-It’s designed for quick experiments: phone → HTTP → Go2 command.
+## 1. Build the workspace
 
-
-## Build the workspace
-
-### 1. Clone this workspace
+### 1.1. Clone this workspace
 ```bash
   mkdir p2_ws
   cd p2_ws
@@ -31,7 +28,7 @@ colcon build
 source install/setup.bash
 ```
 
-### 2. Setup the unique token:
+### 1.2. Setup the unique token:
 On the Go2, create a file in the robot user’s home directory:
 
 ```bash
@@ -45,7 +42,7 @@ chmod 600 ~/.go2_token
 ```
 This token will be used to ensure security and that each Go2 has a unique id.
 
-### 3. Launch the backend and ros2 node
+### 1.3. Launch the backend and ros2 node
 Make the command runnable and launch:
 ```bash
 cd ~/p2_ws/P2RemoteConnection
@@ -60,39 +57,60 @@ cd ~/p2_ws/P2RemoteConnection
 chmod +x start_remote_connection_humble.sh
 ./start_remote_connection_humble.sh
 ```
-### 4. Connect and run 
+### 1.4. Connect and run 
 Check the device ip address:
 ```bash
-hostname -I
+# search for wlan0 ip
+ip -br a 
 ```
 Open the website on a device connected to the same wifi: 
 ```bash
-<device_ip>::8081/app/go2_joystick.html
+<device_ip>::8081/app/
 
-go2: 192.168.123.18/app/go2_joystick.html
+# Local Go2 (ethernet connected)
+192.168.123.18/app/
 ```
 
-## Making the script run on startup
+### 1.5. Landing page and login
+```/app``` will open a landing page allowing you to choose between: 
+1. ```go2_joystick.html```
+    - ```sit``` and ```stand``` commands
+    - 2 joysticks allowing you to move the go2
+    - 3 accessable and toggelable terminals
+    - ```stop``` and ```resume``` toggle, latching all movement commands and stopping the web_teleop node
 
-### 1. Create a systemd service (autostart on boot)
-- A systemd service was created so the system:
+2. ```go2_terminal_only.html```
+    - 3 accessable and toggelable terminals
+    - ```stop``` and ```resume``` toggle, stops all terminals
+
+### Operating without ```web_teleop_node```
+Launching with
+```bash
+./start_remote_connection terminal
+``` 
+Will disable the web_teleop node, allowing the ```go2_terminal_only.html``` to run interupted.
+
+## 2. Making the script run on startup
+
+### 2.1. Create a systemd service (autostart on boot)
+A systemd service can be created so the system
 - Starts automatically on robot boot
 - Restarts if it crashes
 - Runs without any terminal attached
 - Logs output to journalctl
 
-**Service File Location**: 
+**Create the service file**: 
 ```swift
-/etc/systemd/system/p2-remote-connection.service
+sudo vim /etc/systemd/system/p2-remote-connection.service
 ```
-### 2. Enable and start the service:
+### 2.2. Enable and start the service:
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable p2-remote-connection.service
 sudo systemctl start p2-remote-connection.service
 ```
 
-### 3. Monitoring the service:
+### 2.3. Monitoring the service:
 ```bash
 # Check service status
 systemctl status p2-remote-connection.service
@@ -102,7 +120,7 @@ journalctl -u p2-remote-connection.service -f
 sudo systemctl restart p2-remote-connection.service
 ```
 
-### 4. To make changes to the startup:
+### 2.4. To make changes to the startup:
 ```bash
 # Edit the file with access
 sudo vim /etc/systemd/system/p2-remote-connection.service   
@@ -113,7 +131,7 @@ sudo systemctl restart p2-remote-connection.service
 systemctl status p2-remote-connection.service --no-pager    
 ```
 
-### 5. To turn off the startup and test manually:
+### 2.5. To turn off the startup and test manually:
 ```bash
 # Stop the service
 sudo systemctl stop p2-remote-connection.service
@@ -125,7 +143,7 @@ sudo ss -ltnp | egrep ':8000|:8081'
 sudo systemctl restart p2-remote-connection.service
 ```
 
-## How it works
+## 3. How it works
 The start up script: ```./start_remote_connection.sh``` runs 3 seperate process':
 
 **The backend (FastAPI)**:
@@ -166,25 +184,26 @@ You can explore and test everything using FastAPI’s built-in UI:
 
 - `http://<go2-ip>:8000/docs`
 
-### Features
-#### 1.Login gate / UI lock
+### 4. Features
+#### 4.1. Login gate / UI lock
 - Shows login Overlay
 - Stores ROBOT_BASE_URL (where the robot’s API is) and AUTH_TOKEN (your password token)
 - Saves them into localStorage so the browser remembers them
 
-#### 2.Teleop joystick
+#### 4.2. Teleop joystick
 - Renders two canvas joysticks
 - Converts joystick position into a command {linear_x, linear_y, angular_z}
-- Sends that command to the robot API at /teleop about 10 times per second while the stick is active
+- Sends that command to the robot API at /teleop 20 times per second while the stick is active
 
-#### 3.Terminal
+#### 4.3. Terminal
 - Creates an xterm.js terminal
 - Opens a websocket to the robot API at /ws/terminal?token=...
 - Streams keystrokes to backend, and streams output back to the browser
+- Up to 3 terminals can be accessed at a time
 
-## Authentication Overview
+## 5. Authentication Overview
 
-### 1. Unique Token
+### 5.1. Unique Token
 
 Each Go2 has a **unique secret string** (“token” / “password”) that must be provided by the user before the website will send robot commands.
 
@@ -194,9 +213,9 @@ The browser sends this token with each API request using an HTTP header:
 
 The backend checks whether the supplied token matches the Go2’s expected token.
 
-### 2. How the token is used
+### 5.2. How the token is used
 
-### Uvicorn Backend
+#### Uvicorn Backend
 All endpoints depend on the ```require_token``` dependancy, meaning that you cannot run any actions without entering the correct token.
 
 #### Fontend (WebUI) login
