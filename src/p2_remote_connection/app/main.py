@@ -93,17 +93,36 @@ async def on_startup():
 async def health():
     return {"ok": True, "status": "ok"}
 
+SHUTTING_DOWN = False
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    global SHUTTING_DOWN
+    SHUTTING_DOWN = True
+
 # ------------------------------------------------------------
 # Actions
 # ------------------------------------------------------------
 STOP_LATCHED = False
 TELEOP_ENABLED = True
 ALLOWED_ACTIONS = {
-  "sit",
-  "stand",
-  "stop",
-  "standdown",
-  "recover"
+  "sit","stand","stop","standdown","recover",
+
+  # Mode switching
+  "mode_movement","mode_posing","mode_actions",
+
+  # Movement-mode commands
+  "toggle_freebound","toggle_freeavoid","toggle_crossstep","toggle_freejump",
+  "toggle_walkupright","toggle_handstand",
+  "trot_run","economic_gait","switch_avoid","cycle_speed",
+  "stop_move","static_walk",
+
+  # Posing-mode commands
+  "damp","balance_stand",
+
+  # Actions-mode commands
+  "sit_toggle","hello","stretch","content","heart","scrape",
+  "front_pounce","front_jump","front_flip","back_flip","recovery"
 }
 
 @app.post("/actions/{action}")
@@ -159,6 +178,9 @@ def clamp(v: float, lo: float, hi: float) -> float:
 
 @app.post("/teleop")
 async def teleop(cmd: TeleopCommand, request: Request, _=Depends(require_token)):
+    if SHUTTING_DOWN:
+        raise HTTPException(status_code=503, detail="Server shutting down")
+
     if STOP_LATCHED:
         raise HTTPException(status_code=423, detail="STOP latched: teleop disabled")
 
@@ -285,3 +307,30 @@ async def move_forward(req: MoveForwardReq, _=Depends(require_token)):
     # ✅ This assumes you add publish_move_forward(meters) in ros_bridge.py
     get_bridge().publish_move_forward(meters)
     return {"ok": True, "meters": meters}
+
+# ------------------------------------------------------------
+# Sport command passthrough (button-style)
+# ------------------------------------------------------------
+class SportCmdReq(BaseModel):
+    cmd: str = Field(..., min_length=1)
+    enable: Optional[bool] = None
+    level: Optional[int] = None
+    roll: Optional[float] = None
+    pitch: Optional[float] = None
+    yaw: Optional[float] = None
+
+@app.post("/sport/{cmd}")
+async def sport_action(cmd: str, _=Depends(require_token)):
+    if SHUTTING_DOWN:
+        raise HTTPException(status_code=503, detail="Server shutting down")
+    if STOP_LATCHED:
+        raise HTTPException(status_code=423, detail="STOP latched: sport disabled")
+    if not TELEOP_ENABLED:
+        raise HTTPException(status_code=423, detail="Teleop disabled (safety stop)")
+
+    # allowlist if you want:
+    # if cmd not in ALLOWED_SPORT_CMDS:
+    #     raise HTTPException(status_code=404, detail="Sport cmd not allowed")
+
+    get_bridge().publish_sport_cmd({"cmd": cmd})
+    return {"ok": True, "cmd": cmd}

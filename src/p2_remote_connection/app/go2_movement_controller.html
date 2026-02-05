@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Go2 Advanced Web Controller</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 14px; background:#fafafa; }
+    .card { max-width: 1050px; margin: 0 auto; border: 1px solid #ddd; border-radius: 16px; padding: 14px; background:#fff; }
+    h1 { margin: 0 0 10px; font-size: 20px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    input { padding: 10px; border-radius: 12px; border: 1px solid #ccc; flex: 1; min-width: 240px; font-size: 16px; }
+    button { padding: 12px 12px; border-radius: 12px; border: 1px solid #ccc; background:#f7f7f7; font-size: 15px; cursor:pointer; min-width: 120px; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .danger { background:#fff1f1; border-color:#ffb3b3; }
+    .pill { padding: 6px 10px; border-radius: 999px; border:1px solid #ddd; background:#fafafa; font-size:12px; }
+    .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:12px; }
+    .joyBox { border: 1px solid #eee; border-radius: 16px; padding: 10px; background: #fafafa; }
+    .joyTitle { font-size: 13px; color:#333; margin: 0 0 8px; }
+    canvas { width: 100%; height: 260px; border-radius: 14px; background:#fff; border: 1px solid #eee; touch-action:none; }
+
+    .panel { border: 1px solid #eee; border-radius: 16px; padding: 12px; margin-top: 12px; background:#fafafa; }
+    .panel h2 { margin:0 0 10px; font-size: 16px; }
+    .btnGrid { display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:10px; }
+    .status { margin-top: 12px; padding: 10px; border-radius: 12px; background: #fafafa; border: 1px solid #eee; }
+    .small { font-size: 13px; color: #555; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; white-space: pre-wrap; }
+
+    .activeMode { border-color:#7aa7ff; background:#eaf2ff; }
+    .toggleOn { border-color:#7aa7ff; background:#eaf2ff; }
+  </style>
+</head>
+
+<body>
+  <!-- LOGIN OVERLAY -->
+  <div id="loginOverlay" style="
+    position:fixed; inset:0; background:rgba(0,0,0,0.55);
+    display:flex; align-items:center; justify-content:center; z-index:9999;
+    pointer-events:auto;">
+    <div style="background:white; padding:16px; border-radius:16px; width:min(420px, 92vw);">
+      <h2 style="margin:0 0 10px; font-size:18px;">Connect to Go2</h2>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <input id="loginBaseUrl" placeholder="http://robot-ip:8000 or https://robot.domain"
+               style="padding:10px; border-radius:12px; border:1px solid #ccc; font-size:16px;"
+               value="https://p2dingo-control-backend.p2agentx.com" />
+        <input id="loginToken" placeholder="Password" type="password"
+               style="padding:10px; border-radius:12px; border:1px solid #ccc; font-size:16px;" />
+        <button id="unlockBtn" onclick="login()">Unlock</button>
+        <div id="loginMsg" style="font-size:13px; color:#b00020;"></div>
+        <div style="font-size:12px; color:#555;">Tip: This password is unique per robot.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN APP -->
+  <div id="appRoot" style="filter: blur(6px); pointer-events:none; user-select:none;">
+    <div class="card">
+      <h1>Unitree Go2 – Advanced Web Controller</h1>
+
+      <div class="row">
+        <input id="baseUrl" placeholder="http://<go2-ip>:8000" />
+        <button onclick="checkHealth()">Health</button>
+
+        <button id="modeMovement" onclick="setMode('movement')">Mode: Movement</button>
+        <button id="modePosing"   onclick="setMode('posing')">Mode: Posing</button>
+        <button id="modeActions"  onclick="setMode('actions')">Mode: Actions</button>
+
+        <span id="modePill" class="pill">mode: movement</span>
+
+        <button id="safetyToggleBtn" class="danger" onclick="toggleSafety()">STOP</button>
+        <button onclick="logout()">Logout</button>
+      </div>
+
+      <div class="small" style="margin-top:8px;">
+        UI host: <span id="uiHost" class="mono"></span><br/>
+        API base: <span id="apiHost" class="mono"></span>
+      </div>
+
+      <div class="grid2">
+        <div class="joyBox">
+          <div class="joyTitle">Left joystick: X=strife, Y=fwd/back</div>
+          <canvas id="joyLeft"></canvas>
+        </div>
+        <div class="joyBox">
+          <div class="joyTitle">Right joystick: X=turn (yaw)</div>
+          <canvas id="joyRight"></canvas>
+        </div>
+      </div>
+
+    <!-- Movement commands -->
+    <div id="panelMovement" class="panel">
+      <h2>Movement mode commands</h2>
+    
+      <div class="btnGrid">
+        <!-- One-shot gait commands -->
+        <button onclick="postAction('economic_gait')">
+          EconomicGait
+        </button>
+      
+        <button onclick="postAction('trot_run')">
+          TrotRun
+        </button>
+      
+        <button onclick="postAction('switch_avoid')">
+          SwitchAvoidMode
+        </button>
+      
+        <button onclick="postAction('cycle_speed')">
+          SpeedLevel (cycle)
+        </button>
+      
+        <!-- Toggle locomotion modes -->
+        <button
+          data-action="toggle_freebound"
+          data-label="FreeBound"
+          onclick="setToggleExclusive('toggle_freebound')">
+          FreeBound
+        </button>
+      
+        <button
+          data-action="toggle_freeavoid"
+          data-label="FreeAvoid"
+          onclick="setToggleExclusive('toggle_freeavoid')">
+          FreeAvoid
+        </button>
+      
+        <button
+          data-action="toggle_crossstep"
+          data-label="CrossStep"
+          onclick="setToggleExclusive('toggle_crossstep')">
+          CrossStep
+        </button>
+      
+        <button
+          data-action="toggle_freejump"
+          data-label="FreeJump"
+          onclick="setToggleExclusive('toggle_freejump')">
+          FreeJump
+        </button>
+      
+        <button
+          data-action="toggle_walkupright"
+          data-label="WalkUpright"
+          onclick="setToggleExclusive('toggle_walkupright')">
+          WalkUpright
+        </button>
+      
+        <button
+          data-action="toggle_handstand"
+          data-label="HandStand"
+          onclick="setToggleExclusive('toggle_handstand')">
+          HandStand
+        </button>
+      
+        <!-- Explicit control -->
+        <button onclick="postAction('stop_move')">
+          StopMove
+        </button>
+      
+        <button onclick="postAction('static_walk')">
+          StaticWalk
+        </button>
+      </div>
+    </div>
+
+      <!-- Posing commands -->
+      <div id="panelPosing" class="panel" style="display:none;">
+        <h2>Posing mode commands</h2>
+        <div class="small" style="margin-bottom:8px;">
+          In posing mode, joysticks continuously drive <span class="mono">Euler(roll,pitch,yaw)</span>.
+        </div>
+        <div class="btnGrid">
+          <button onclick="postAction('damp')">Damp</button>
+          <button onclick="postAction('balance_stand')">BalanceStand</button>
+        </div>
+      </div>
+
+      <!-- Actions commands -->
+      <div id="panelActions" class="panel" style="display:none;">
+        <h2>Actions mode commands</h2>
+        <div class="btnGrid">
+          <button onclick="postAction('sit_toggle')">Sit ↔ Stand (toggle)</button>
+          <button onclick="postAction('hello')">Hello</button>
+          <button onclick="postAction('stretch')">Stretch</button>
+          <button onclick="postAction('content')">Content</button>
+          <button onclick="postAction('heart')">Heart</button>
+          <button onclick="postAction('scrape')">Scrape</button>
+          <button onclick="postAction('front_jump')">FrontJump</button>
+          <button onclick="postActionWithConfirm('front_pounce')">FrontPounce</button>
+          <button onclick="postActionWithConfirm('front_flip')">FrontFlip</button>
+          <button onclick="postActionWithConfirm('back_flip')">BackFlip</button>
+          <button onclick="postAction('recovery')">RecoveryStand</button>
+        </div>
+      </div>
+      
+      <!-- SPECIAL ACTION CONFIRM MODAL -->
+      <div id="confirmOverlay" style="
+        position:fixed; inset:0; background:rgba(0,0,0,0.55);
+        display:none; align-items:center; justify-content:center; z-index:9998;">
+        <div style="background:white; padding:16px; border-radius:16px; width:min(460px, 92vw);">
+          <h2 style="margin:0 0 8px; font-size:18px;">Confirm action</h2>
+          <div id="confirmText" style="font-size:14px; color:#333; margin-bottom:12px;">
+            Are you sure?
+          </div>
+          <div style="display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap;">
+            <button onclick="confirmCancel()" style="min-width:120px;">Cancel</button>
+            <button class="danger" onclick="confirmYes()" style="min-width:120px;">Yes, do it</button>
+          </div>
+          <div style="font-size:12px; color:#555; margin-top:10px;">
+            Tip: these moves can be risky. Make sure the area is clear and the robot is stable.
+          </div>
+        </div>
+      </div>
+
+      <div class="status">
+        <div id="msg" class="small">Ready.</div>
+        <div id="detail" class="mono"></div>
+      </div>
+
+      <div class="small" style="margin-top:10px;">
+        STOP latches the system: no actions/teleop until RESUME.
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ----------------------------
+  // Auth + baseUrl (same idea as your go2_joystick.html)
+  // ----------------------------
+  let COMMS_ENABLED = true;
+  let AUTH_TOKEN = "";
+  let ROBOT_BASE_URL = "";
+
+  const LS_URL_KEY = "go2_baseUrl";
+  const LS_TOKEN_KEY = "go2_token";
+
+  function baseUrl() {
+    return (ROBOT_BASE_URL || document.getElementById("baseUrl").value || "")
+      .trim().replace(/\/+$/, "");
+  }
+  function authHeaders() {
+    return AUTH_TOKEN ? { "Authorization": `Bearer ${AUTH_TOKEN}` } : {};
+  }
+  function lockUI() {
+    document.getElementById("loginOverlay").style.display = "flex";
+    const root = document.getElementById("appRoot");
+    root.style.filter = "blur(6px)";
+    root.style.pointerEvents = "none";
+    root.style.userSelect = "none";
+  }
+  function unlockUI() {
+    document.getElementById("loginOverlay").style.display = "none";
+    const root = document.getElementById("appRoot");
+    root.style.filter = "none";
+    root.style.pointerEvents = "auto";
+    root.style.userSelect = "auto";
+  }
+  function saveAuth() {
+    localStorage.setItem(LS_URL_KEY, ROBOT_BASE_URL);
+    localStorage.setItem(LS_TOKEN_KEY, AUTH_TOKEN);
+  }
+  function loadAuth() {
+    return {
+      u: localStorage.getItem(LS_URL_KEY) || "",
+      t: localStorage.getItem(LS_TOKEN_KEY) || ""
+    };
+  }
+  function clearAuth() {
+    localStorage.removeItem(LS_URL_KEY);
+    localStorage.removeItem(LS_TOKEN_KEY);
+  }
+  function ensureLoggedIn() {
+    if (!ROBOT_BASE_URL || !AUTH_TOKEN) {
+      document.getElementById("loginMsg").textContent = "Please log in.";
+      lockUI();
+      return false;
+    }
+    return true;
+  }
+
+  async function httpGet(path, opts = {}) {
+    const url = baseUrl() + path;
+    if (!commsAllowed(path, opts)) return { ok:false, status:0, text:"Comms disabled", url };
+    const r = await fetch(url, { headers: authHeaders() });
+    const t = await r.text();
+    if (r.status === 401 || r.status === 403) {
+      AUTH_TOKEN = ""; ROBOT_BASE_URL = ""; clearAuth(); lockUI();
+      document.getElementById("loginMsg").textContent = "Invalid token. Please log in again.";
+    }
+    return { ok:r.ok, status:r.status, text:t, url };
+  }
+  async function httpPost(path, json=null, opts = {}) {
+    const url = baseUrl() + path;
+    if (!commsAllowed(path, opts)) return { ok:false, status:0, text:"Comms disabled", url };
+    const headers = { ...authHeaders() };
+    if (json !== null) headers["Content-Type"] = "application/json";
+    const r = await fetch(url, { method:"POST", headers, body: json ? JSON.stringify(json) : null });
+    const t = await r.text();
+    if (r.status === 401 || r.status === 403) {
+      AUTH_TOKEN = ""; ROBOT_BASE_URL = ""; clearAuth(); lockUI();
+      document.getElementById("loginMsg").textContent = "Invalid token. Please log in again.";
+    }
+    return { ok:r.ok, status:r.status, text:t, url };
+  }
+
+  function setStatus(text, ok=true, detail="") {
+    const msg = document.getElementById("msg");
+    const detailEl = document.getElementById("detail");
+    msg.textContent = text;
+    msg.style.color = ok ? "#0a7a0a" : "#b00020";
+    detailEl.textContent = detail || "";
+    document.getElementById("apiHost").textContent = baseUrl();
+  }
+
+  function isAlwaysAllowed(path) {
+    return path === "/health" || path.startsWith("/safety/");
+  }
+  function commsAllowed(path, opts = {}) {
+    if (opts.bypassCommsGate) return true;
+    if (isAlwaysAllowed(path)) return true;
+    return COMMS_ENABLED;
+  }
+
+  async function login() {
+    const msg = document.getElementById("loginMsg");
+    msg.textContent = "";
+
+    const url = document.getElementById("loginBaseUrl").value.trim().replace(/\/+$/, "");
+    const token = document.getElementById("loginToken").value.trim();
+    if (!url || !token) { msg.textContent = "Please enter robot URL and password."; return; }
+
+    ROBOT_BASE_URL = url;
+    AUTH_TOKEN = token;
+
+    document.getElementById("baseUrl").value = ROBOT_BASE_URL;
+    document.getElementById("apiHost").textContent = ROBOT_BASE_URL;
+
+    const r = await httpGet("/health").catch(e => ({ ok:false, status:0, text:String(e), url:baseUrl()+"/health" }));
+    if (!r.ok) {
+      msg.textContent = (r.status === 401 || r.status === 403) ? "Incorrect token entered." : `Login failed (HTTP ${r.status})`;
+      AUTH_TOKEN = ""; ROBOT_BASE_URL = ""; clearAuth(); lockUI();
+      return;
+    }
+
+    saveAuth();
+    unlockUI();
+    setStatus("Unlocked ✅", true);
+    await refreshSafetyStatus();
+  }
+
+  function logout() {
+    AUTH_TOKEN = ""; ROBOT_BASE_URL = ""; clearAuth();
+    document.getElementById("loginToken").value = "";
+    lockUI();
+    setStatus("Logged out.", true);
+  }
+
+  window.addEventListener("DOMContentLoaded", async () => {
+    document.getElementById("uiHost").textContent = location.origin;
+    for (const a of Object.keys(toggleState)) {
+      setToggleBtn(a, false);
+    }
+    const defaultApi = "https://p2dingo-control-backend.p2agentx.com";
+    document.getElementById("loginBaseUrl").value = defaultApi;
+    document.getElementById("baseUrl").value = defaultApi;
+    document.getElementById("apiHost").textContent = defaultApi;
+
+    const {u,t} = loadAuth();
+    if (u && t) {
+      ROBOT_BASE_URL = u; AUTH_TOKEN = t;
+      document.getElementById("loginBaseUrl").value = u;
+      document.getElementById("loginToken").value = t;
+      const r = await httpGet("/health").catch(() => null);
+      if (r && r.ok) {
+        unlockUI();
+        setStatus("Unlocked ✅ (remembered)", true);
+        await refreshSafetyStatus();
+        return;
+      }
+      AUTH_TOKEN = ""; ROBOT_BASE_URL = ""; clearAuth();
+    }
+
+    lockUI();
+  });
+
+  // ----------------------------
+  // Health
+  // ----------------------------
+  async function checkHealth() {
+    setStatus("Checking /health...");
+    const r = await httpGet("/health");
+    setStatus(r.ok ? "Health OK ✅" : `Health failed (HTTP ${r.status})`, r.ok, `URL: ${r.url}\n${r.text}`);
+  }
+
+  // ----------------------------
+  // STOP/RESUME latch (same behavior as your existing page)
+  // ----------------------------
+  let stopLatched = false;
+  let safetyBusy = false;
+
+  function setSafetyButton(latched) {
+    stopLatched = !!latched;
+    const btn = document.getElementById("safetyToggleBtn");
+    btn.textContent = stopLatched ? "RESUME" : "STOP";
+    btn.classList.toggle("danger", !stopLatched);
+    btn.disabled = safetyBusy;
+  }
+
+  async function refreshSafetyStatus() {
+    if (!ensureLoggedIn()) return;
+    const r = await httpGet("/safety/status", { bypassCommsGate: true });
+    if (r.ok) {
+      try { setSafetyButton(JSON.parse(r.text).stop_latched); } catch {}
+    }
+    return r;
+  }
+
+  async function toggleSafety() {
+    if (!ensureLoggedIn() || safetyBusy) return;
+    safetyBusy = true;
+    setSafetyButton(stopLatched);
+
+    try {
+      if (!stopLatched) {
+        const r = await httpPost("/safety/stop", null, { bypassCommsGate: true });
+        if (!r.ok) { setStatus(`STOP failed (HTTP ${r.status})`, false, `URL: ${r.url}\n${r.text}`); return; }
+        COMMS_ENABLED = false;
+        setStatus("STOP latched 🔒", true, `URL: ${r.url}\n${r.text}`);
+      } else {
+        const r = await httpPost("/safety/resume", null, { bypassCommsGate: true });
+        if (!r.ok) { setStatus(`RESUME failed (HTTP ${r.status})`, false, `URL: ${r.url}\n${r.text}`); return; }
+        COMMS_ENABLED = true;
+        setStatus("RESUME ✅", true, `URL: ${r.url}\n${r.text}`);
+      }
+    } finally {
+      safetyBusy = false;
+      await refreshSafetyStatus();
+    }
+  }
+
+  // ----------------------------
+  // Mode + Action buttons (ALL go through /actions/{action})
+  // ----------------------------
+  let currentMode = "movement";
+
+  function setToggleBtn(action, on) {
+    const btn = document.querySelector(`[data-action="${action}"]`);
+    if (!btn) return;
+    btn.classList.toggle("toggleOn", !!on);
+    btn.textContent = btn.getAttribute("data-label") + (on ? " ✅" : "");
+  }
+
+  const TOGGLES = [
+    "toggle_freebound",
+    "toggle_freeavoid",
+    "toggle_crossstep",
+    "toggle_freejump",
+    "toggle_walkupright",
+    "toggle_handstand",
+  ];
+  
+  const toggleState = Object.fromEntries(TOGGLES.map(a => [a, false]));
+  
+  function setToggleBtn(action, on) {
+    const btn = document.querySelector(`[data-action="${action}"]`);
+    if (!btn) return;
+    const label = btn.getAttribute("data-label");
+    btn.textContent = label + (on ? " ✅" : "");
+    btn.classList.toggle("toggleOn", !!on);
+  }
+  
+  function setAllToggleButtonsEnabled(enabled) {
+    for (const a of TOGGLES) {
+      const btn = document.querySelector(`[data-action="${a}"]`);
+      if (btn) btn.disabled = !enabled;
+    }
+  }
+  
+  async function setToggleExclusive(target) {
+    if (!ensureLoggedIn()) return;
+    if (!COMMS_ENABLED) {
+      setStatus("STOP latched 🔒", false, "Press RESUME to enable commands.");
+      return;
+    }
+  
+    // If target currently ON -> turn it OFF only
+    if (toggleState[target]) {
+      setAllToggleButtonsEnabled(false);
+      try {
+        const r = await httpPost(`/actions/${target}`); // backend toggles it off
+        if (!r.ok) {
+          setStatus(`${target} failed (HTTP ${r.status})`, false, `URL: ${r.url}\n${r.text}`);
+          return;
+        }
+        toggleState[target] = false;
+        setToggleBtn(target, false);
+        setStatus(`${target.replace("toggle_", "")} DISABLED ✅`, true);
+      } finally {
+        setAllToggleButtonsEnabled(true);
+      }
+      return;
+    }
+  
+    // Otherwise: turn OFF any other active toggle(s), then turn target ON
+    setAllToggleButtonsEnabled(false);
+    try {
+      for (const a of TOGGLES) {
+        if (a !== target && toggleState[a]) {
+          const rOff = await httpPost(`/actions/${a}`);
+          if (!rOff.ok) {
+            setStatus(`Failed disabling ${a} (HTTP ${rOff.status})`, false, `URL: ${rOff.url}\n${rOff.text}`);
+            return;
+          }
+          toggleState[a] = false;
+          setToggleBtn(a, false);
+        }
+      }
+    
+      const rOn = await httpPost(`/actions/${target}`);
+      if (!rOn.ok) {
+        setStatus(`${target} failed (HTTP ${rOn.status})`, false, `URL: ${rOn.url}\n${rOn.text}`);
+        return;
+      }
+      toggleState[target] = true;
+      setToggleBtn(target, true);
+    
+      setStatus(`${target.replace("toggle_", "")} ENABLED ✅`, true);
+    } finally {
+      setAllToggleButtonsEnabled(true);
+    }
+  }
+  
+  
+  function updateModeUI() {
+    document.getElementById("modePill").textContent = `mode: ${currentMode}`;
+
+    document.getElementById("modeMovement").classList.toggle("activeMode", currentMode==="movement");
+    document.getElementById("modePosing").classList.toggle("activeMode", currentMode==="posing");
+    document.getElementById("modeActions").classList.toggle("activeMode", currentMode==="actions");
+
+    document.getElementById("panelMovement").style.display = (currentMode==="movement") ? "block" : "none";
+    document.getElementById("panelPosing").style.display   = (currentMode==="posing") ? "block" : "none";
+    document.getElementById("panelActions").style.display  = (currentMode==="actions") ? "block" : "none";
+  }
+
+  async function setMode(m) {
+    if (!ensureLoggedIn()) return;
+    if (!COMMS_ENABLED) { setStatus("STOP latched 🔒", false, "Press RESUME to enable commands."); return; }
+
+    const map = {
+      movement: "mode_movement",
+      posing: "mode_posing",
+      actions: "mode_actions"
+    };
+    const action = map[m];
+    const r = await httpPost(`/actions/${action}`);
+    if (!r.ok) {
+      setStatus(`Mode set failed (HTTP ${r.status})`, false, `URL: ${r.url}\n${r.text}`);
+      return;
+    }
+    currentMode = m;
+    updateModeUI();
+    setStatus(`Mode: ${m} ✅`, true);
+  }
+
+  async function postAction(action) {
+    if (!ensureLoggedIn()) return;
+    if (!COMMS_ENABLED) { setStatus("STOP latched 🔒", false, "Press RESUME to enable commands."); return; }
+
+    const r = await httpPost(`/actions/${action}`);
+    setStatus(r.ok ? `${action} ✅` : `${action} failed (HTTP ${r.status})`, r.ok, `URL: ${r.url}\n${r.text}`);
+  }
+
+  // ----------------------------
+  // Special actions confirmation
+  // ----------------------------
+  const SPECIAL_ACTIONS = new Set(["front_pounce", "front_flip", "back_flip"]);
+  let pendingSpecialAction = null;
+
+  function openConfirm(action) {
+    pendingSpecialAction = action;
+    const niceName = action.replace(/_/g, " ");
+    document.getElementById("confirmText").textContent =
+      `Are you sure you want to perform "${niceName}"?`;
+    document.getElementById("confirmOverlay").style.display = "flex";
+  }
+
+  function confirmCancel() {
+    pendingSpecialAction = null;
+    document.getElementById("confirmOverlay").style.display = "none";
+    setStatus("Cancelled.", true);
+  }
+
+  async function confirmYes() {
+    const action = pendingSpecialAction;
+    pendingSpecialAction = null;
+    document.getElementById("confirmOverlay").style.display = "none";
+    if (!action) return;
+
+    // Send the real action
+    await postAction(action);
+  }
+
+  function postActionWithConfirm(action) {
+    if (SPECIAL_ACTIONS.has(action)) {
+      openConfirm(action);
+      return;
+    }
+    postAction(action);
+  }
+
+  // ----------------------------
+  // Joystick -> /teleop (exact same sending pattern you already use)
+  // ----------------------------
+  let latest = { lx: 0, ly: 0, rx: 0 };
+  const MAX_LIN = 0.6;
+  const MAX_ANG = 1.2;
+  const SEND_HZ = 20;
+  const SEND_PERIOD_MS = Math.floor(1000 / SEND_HZ);
+
+  function mapToCmd(lx, ly, rx) {
+    const linear_x  = (-ly) * MAX_LIN;
+    const linear_y  = (lx)  * MAX_LIN;
+    const angular_z = (rx)  * MAX_ANG;
+    return { linear_x, linear_y, angular_z };
+  }
+
+  async function sendTeleop(lx, ly, rx) {
+    if (!ensureLoggedIn() || !COMMS_ENABLED) return;
+    const cmd = mapToCmd(lx, ly, rx);
+    const r = await httpPost("/teleop", cmd);
+    if (!r.ok) {
+      setStatus(`Teleop failed (HTTP ${r.status})`, false, `URL: ${r.url}\n${r.text}`);
+    }
+  }
+
+  function makeJoystick(canvasId, onMove) {
+    const canvas = document.getElementById(canvasId);
+    const ctx = canvas.getContext("2d");
+
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = Math.floor(rect.width * devicePixelRatio);
+      canvas.height = Math.floor(rect.height * devicePixelRatio);
+      draw(0, 0, false);
+    }
+
+    let active = false;
+
+    function draw(nx, ny, isActive) {
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const cx = w/2, cy = h/2;
+      const r = Math.min(w,h)*0.35;
+      const kr = Math.min(w,h)*0.08;
+
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+      ctx.strokeStyle="#ddd"; ctx.lineWidth=4*devicePixelRatio; ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(cx-r,cy); ctx.lineTo(cx+r,cy);
+      ctx.moveTo(cx,cy-r); ctx.lineTo(cx,cy+r);
+      ctx.strokeStyle="#eee"; ctx.lineWidth=2*devicePixelRatio; ctx.stroke();
+
+      const kx = cx + nx*r;
+      const ky = cy + ny*r;
+      ctx.beginPath(); ctx.arc(kx,ky,kr,0,Math.PI*2);
+      ctx.fillStyle = isActive ? "#e9f2ff" : "#f5f5f5";
+      ctx.strokeStyle="#bbb"; ctx.lineWidth=3*devicePixelRatio;
+      ctx.fill(); ctx.stroke();
+    }
+
+    function pointerToNorm(e) {
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width;
+      const y = (e.clientY - rect.top) / rect.height;
+      let nx = (x - 0.5) * 2;
+      let ny = (y - 0.5) * 2;
+      const mag = Math.hypot(nx, ny);
+      if (mag > 1) { nx/=mag; ny/=mag; }
+      return { nx, ny };
+    }
+
+    canvas.addEventListener("pointerdown", (e) => {
+      canvas.setPointerCapture(e.pointerId);
+      active = true;
+      const {nx,ny} = pointerToNorm(e);
+      draw(nx,ny,true);
+      onMove(nx,ny,true);
+    });
+    canvas.addEventListener("pointermove", (e) => {
+      if (!active) return;
+      const {nx,ny} = pointerToNorm(e);
+      draw(nx,ny,true);
+      onMove(nx,ny,true);
+    });
+    function release() {
+      if (!active) return;
+      active = false;
+      draw(0,0,false);
+      onMove(0,0,false);
+    }
+    canvas.addEventListener("pointerup", release);
+    canvas.addEventListener("pointercancel", release);
+    window.addEventListener("resize", resize);
+    resize();
+  }
+
+  makeJoystick("joyLeft", (x,y,active) => {
+    latest.lx = active ? x : 0;
+    latest.ly = active ? y : 0;
+  });
+  makeJoystick("joyRight", (x,y,active) => {
+    latest.rx = active ? x : 0;
+  });
+
+  window.setInterval(() => {
+    if (!ensureLoggedIn() || !COMMS_ENABLED) return;
+    const eps = 0.01;
+    if (Math.abs(latest.lx) < eps && Math.abs(latest.ly) < eps && Math.abs(latest.rx) < eps) return;
+    sendTeleop(latest.lx, latest.ly, latest.rx);
+  }, SEND_PERIOD_MS);
+
+  // initial
+  updateModeUI();
+</script>
+</body>
+</html>

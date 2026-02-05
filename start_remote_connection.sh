@@ -15,10 +15,10 @@ export HOME="/home/unitree"
 # ----------------------------
 # UI selection by CLI arg
 # ----------------------------
-MODE="${1:-joystick}"   # joystick | terminal
+MODE="${1:-joystick}"   # joystick | terminal | movement
 
 case "$MODE" in
-  terminal|joystick|"")
+  terminal|joystick|movement|"")
     ;;
   *)
     echo "[run_all] ❌ Unknown mode: '$MODE'"
@@ -155,28 +155,34 @@ for i in {1..30}; do
 done
 
 # ----------------------------
-# 4) Start bridge node (ONLY in joystick mode)
+# 4) Start ROS nodes depending on MODE
 # ----------------------------
-BRIDGE_PID=""
-if [ "$MODE" = "joystick" ] || [ -z "$MODE" ]; then
-  BRIDGE_BIN="$WS_DIR/install/p2_remote_connection/lib/p2_remote_connection/web_teleop_bridge"
-  if [ -x "$BRIDGE_BIN" ]; then
-    echo "[run_all] Starting bridge: $BRIDGE_BIN"
-    "$BRIDGE_BIN" &
-    BRIDGE_PID=$!
-    pids+=("$BRIDGE_PID")
-  else
-    echo "[run_all] Starting ROS2 bridge via ros2 run (fallback)"
-    cd "$WS_DIR"
-    ros2 run p2_remote_connection web_teleop_bridge &
-    BRIDGE_PID=$!
-    pids+=("$BRIDGE_PID")
-  fi
+kill_conflicting_nodes() {
+  echo "[run_all] Killing conflicting motion nodes (if any)..."
+  pkill -f "ros2 run p2_remote_connection web_teleop_bridge" || true
+  pkill -f "ros2 run p2_remote_connection web_advanced_bridge" || true
+  pkill -f "ros2 run p2_remote_connection advanced_gamepad_controller_web" || true
+  pkill -f "p2_remote_connection.*web_teleop_bridge" || true
+  pkill -f "p2_remote_connection.*web_advanced_bridge" || true
+  pkill -f "p2_remote_connection.*advanced_gamepad_controller_web" || true
+  sleep 0.3
+}
 
-  sleep 0.5
-  ok_or_die "bridge" "$BRIDGE_PID"
-else
-  echo "[run_all] Terminal mode: skipping web_teleop_bridge ✅"
+kill_conflicting_nodes
+if [ "$MODE" = "joystick" ] || [ -z "$MODE" ]; then
+  echo "[run_all] Mode joystick: starting web_teleop_bridge + move_forward_meters_node"
+  ros2 run p2_remote_connection web_teleop_bridge &
+  pids+=("$!")
+  ros2 run p2_remote_connection move_forward_meters_node &
+  pids+=("$!")
+
+elif [ "$MODE" = "movement" ]; then
+  echo "[run_all] Mode movement: starting advanced_gamepad_controller_web"
+  ros2 run p2_remote_connection advanced_gamepad_controller_web &
+  pids+=("$!")
+
+elif [ "$MODE" = "terminal" ]; then
+  echo "[run_all] Terminal mode: skipping motion nodes ✅"
 fi
 
 # Give them a moment to crash if they will
@@ -191,9 +197,12 @@ echo "[run_all] ✅ All started."
 
 if [ "$MODE" = "terminal" ]; then
   echo "[run_all] UI:  http://<this-machine-ip>:$UI_PORT/app/go2_terminal_only.html"
+elif [ "$MODE" = "movement" ]; then
+  echo "[run_all] UI:  http://<this-machine-ip>:$UI_PORT/app/go2_movement_controller.html"
 else
   echo "[run_all] UI:  http://<this-machine-ip>:$UI_PORT/app/go2_joystick.html"
 fi
+
 
 echo "[run_all] API: http://<this-machine-ip>:$API_PORT"
 echo "[run_all] Press Ctrl+C to stop everything."

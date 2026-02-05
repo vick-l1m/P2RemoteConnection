@@ -15,7 +15,8 @@ from nav_msgs.msg import OccupancyGrid
 from map_msgs.msg import OccupancyGridUpdate
 from fastapi import WebSocket
 from std_msgs.msg import Bool
-
+from std_msgs.msg import Float32
+from std_msgs.msg import String as RosString
 
 @dataclass
 class MapStore:
@@ -68,7 +69,8 @@ class WebRosBridge(Node):
         self.pub_twist = self.create_publisher(Twist, "/web_teleop", 10)
         self.pub_action = self.create_publisher(String, "/web_action", 10)
         self.pub_enabled = self.create_publisher(Bool, "/web_teleop_enabled", 1)
-        self.move_forward_pub = self.node.create_publisher(Float32, "/move_forward_meters", 10)
+        self.move_forward_pub = self.create_publisher(Float32, "/move_forward_meters", 10)
+        self.pub_sport_cmd = self.create_publisher(RosString, "/web_sport_cmd", 10)
 
         # Map subscriptions
         map_qos = QoSProfile(
@@ -100,24 +102,39 @@ class WebRosBridge(Node):
         self._loop = loop
 
     # ---------------- Teleop / Action ----------------
+    def _ok_to_publish(self) -> bool:
+        try:
+            return rclpy.ok()
+        except Exception:
+            return False
+
     def publish_teleop(self, vx: float, vy: float, vyaw: float):
+        if not self._ok_to_publish():
+            return
         msg = Twist()
         msg.linear.x = float(vx)
         msg.linear.y = float(vy)
         msg.angular.z = float(vyaw)
-        self.pub_twist.publish(msg)
+        try:
+            self.pub_twist.publish(msg)
+        except Exception:
+            return
 
     def publish_action(self, action: str):
+        if not self._ok_to_publish():
+            return
         m = String()
         m.data = action
         self.pub_action.publish(m)
 
     # ---------------- Move forward helper ----------------
     def publish_move_forward(self, meters: float):
+        if not self._ok_to_publish():
+            return
         msg = Float32()
         msg.data = float(meters)
         self.move_forward_pub.publish(msg)
-
+    
     # ---------------- Map callbacks ----------------
     def _on_map_full(self, msg: OccupancyGrid):
         raw = _i8_list_to_bytes(msg.data)
@@ -186,6 +203,8 @@ class WebRosBridge(Node):
         self._loop.call_soon_threadsafe(_schedule)
 
     def publish_enabled(self, enabled: bool):
+        if not self._ok_to_publish():
+            return
         b = Bool()
         b.data = bool(enabled)
         self.pub_enabled.publish(b)
@@ -222,3 +241,5 @@ def get_bridge() -> WebRosBridge:
 
 def get_map_store() -> MapStore:
     return _map_store
+
+    

@@ -73,6 +73,34 @@ ament_target_dependencies(move_forward_meters_node
   geometry_msgs
 )
 
+# Excecutabe: Advanced gamepad controller
+add_executable(advanced_gamepad_controller_web
+  src/advanced_gamepad_controller_web.cpp
+  src/common/ros2_sport_client.cpp
+)
+
+target_include_directories(advanced_gamepad_controller_web PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/p2_remote_connection
+)
+
+# If you want JSON parsing:
+find_package(nlohmann_json REQUIRED)
+target_link_libraries(advanced_gamepad_controller_web nlohmann_json::nlohmann_json)
+
+ament_target_dependencies(advanced_gamepad_controller_web
+  rclcpp
+  geometry_msgs
+  std_msgs
+  nav_msgs
+  unitree_api
+  unitree_go
+)
+
+install(TARGETS advanced_gamepad_controller_web
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 # Install rules
 # - install headers so other packages can include them
 # - install binaries into the standard ROS 2 lib/<pkg> directory

@@ -20,9 +20,9 @@ public:
         
         teleop_pub = this->create_publisher<geometry_msgs::msg::Twist>("/web_teleop", 10);
         odom_sub = this->create_subscription<nav_msgs::msg::Odometry>(
-            "/odom", 10, std::bind(&MoveForwardMeters::onOdom, this, std::placeholders::_1));
+            "/utlidar/robot_odom", 10, std::bind(&MoveForwardMeters::onOdom, this, std::placeholders::_1));
         goal_sub_  = this->create_subscription<std_msgs::msg::Float32>(
-            "/move_forward_goal_m", 10, std::bind(&MoveForwardMeters::onGoal, this, std::placeholders::_1));
+            "/move_forward_meters", 10, std::bind(&MoveForwardMeters::onGoal, this, std::placeholders::_1));
         
         timer_ = this->create_wall_timer(std::chrono::duration<double>(1.0 / hz_),
             std::bind(&MoveForwardMeters::onTick, this));
@@ -44,6 +44,7 @@ private:
 
     // ---- Params and state ----
     double vx_{0.25}, hz_{20.0}, timeout_s_{12.0}, max_m_{5.0};
+    double dir_{1.0};   // +1 forward, -1 backward
 
     // ---- Odom callback state ----
     bool have_odom_{false};
@@ -70,14 +71,17 @@ private:
 
         double meters = static_cast<double>(msg->data);
 
-        // Validate input and clamp
-        if (meters <= 0.0) {
-            RCLCPP_WARN(get_logger(), "Received non-positive goal, ignoring");
-            return;
+        // Reject tiny commands (noise)
+        const double eps = 1e-3;
+        if (!std::isfinite(meters) || std::fabs(meters) < eps) {
+          RCLCPP_WARN(get_logger(), "Received ~zero/invalid goal, ignoring");
+          return;
         }
-        if (meters > max_m_) {
-            RCLCPP_WARN(get_logger(), "Received goal %.2f m exceeds max %.2f m, clamping", meters, max_m_);
-            meters = max_m_;
+        
+        // Clamp magnitude to max
+        if (std::fabs(meters) > max_m_) {
+          RCLCPP_WARN(get_logger(), "Goal %.2f m exceeds max %.2f m, clamping", meters, max_m_);
+          meters = std::copysign(max_m_, meters);  // keep sign
         }
         
         if (!have_odom_) {
@@ -106,9 +110,9 @@ private:
         teleop_pub->publish(t);
     }
 
-    void publishForward() {
+    void publishCmd() {
         geometry_msgs::msg::Twist t{};
-        t.linear.x = vx_;
+        t.linear.x = dir_ * vx_;   // dir_ flips sign        
         t.linear.y = 0.0;
         t.angular.z = 0.0;
         teleop_pub->publish(t);
@@ -131,7 +135,7 @@ private:
             active_ = false;
             return; 
         } else {
-            publishForward();
+            publishCmd();
         }
     }
 };

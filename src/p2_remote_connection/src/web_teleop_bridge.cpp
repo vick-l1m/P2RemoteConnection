@@ -215,6 +215,7 @@ private:
     // After flush, send StopMove once then stay silent
     if (was_active_) {
       was_active_ = false;
+      sportClient_.StopMove(req);
     }
   }
 };
