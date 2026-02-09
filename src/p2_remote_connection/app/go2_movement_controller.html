@@ -69,6 +69,8 @@
           <button onclick="postAction('trot_run')">TrotRun</button>
           <button onclick="postAction('switch_avoid')">SwitchAvoidMode</button>
           <button onclick="postAction('cycle_speed')">SpeedLevel (cycle)</button>
+          <button onclick="postAction('freewalk')">FreeWalk</button>
+
 
           <button data-action="toggle_freebound" data-label="FreeBound" onclick="setToggleExclusive('toggle_freebound')">FreeBound</button>
           <button data-action="toggle_freeavoid" data-label="FreeAvoid" onclick="setToggleExclusive('toggle_freeavoid')">FreeAvoid</button>
@@ -76,7 +78,7 @@
           <button data-action="toggle_freejump" data-label="FreeJump" onclick="setToggleExclusive('toggle_freejump')">FreeJump</button>
           <button data-action="toggle_walkupright" data-label="WalkUpright" onclick="setToggleExclusive('toggle_walkupright')">WalkUpright</button>
           <button data-action="toggle_handstand" data-label="HandStand" onclick="setToggleExclusive('toggle_handstand')">HandStand</button>
-
+          <button data-action="toggle_classicwalk" data-label="ClassicWalk" onclick="setToggleExclusive('toggle_classicwalk')">ClassicWalk</button>
           <button onclick="postAction('stop_move')">StopMove</button>
           <button onclick="postAction('static_walk')">StaticWalk</button>
         </div>
@@ -102,10 +104,28 @@
           <button onclick="postAction('heart')">Heart</button>
           <button onclick="postAction('scrape')">Scrape</button>
           <button onclick="postAction('front_jump')">FrontJump</button>
-          <button onclick="postAction('front_pounce')">FrontPounce</button>
-          <button onclick="postAction('front_flip')">FrontFlip</button>
-          <button onclick="postAction('back_flip')">BackFlip</button>
+
+          <!-- Danger actions -->
+          <button onclick="postDangerAction('front_pounce')">FrontPounce</button>
+          <button onclick="postDangerAction('front_flip')">FrontFlip</button>
+          <button onclick="postDangerAction('back_flip')">BackFlip</button>
+          <button onclick="postDangerAction('left_flip')">LeftFlip</button>
+
           <button onclick="postAction('recovery')">RecoveryStand</button>
+        </div>
+      </div>
+
+      <!-- DANGER CONFIRM MODAL -->
+      <div id="dangerModal" class="modalOverlay" style="display:none;">
+        <div class="modalCard">
+          <h2 style="margin:0 0 6px;">Are you sure?</h2>
+          <div id="dangerModalText" class="small" style="margin-bottom:12px;">
+            You are about to run a risky action.
+          </div>
+          <div class="row" style="justify-content:flex-end;">
+            <button id="dangerCancelBtn" onclick="dangerModalCancel()">Cancel</button>
+            <button id="dangerConfirmBtn" class="danger" onclick="dangerModalConfirm()">Confirm</button>
+          </div>
         </div>
       </div>
 
@@ -232,6 +252,70 @@
   }
 
   // ----------------------------
+  // Modal confirmation for risky actions
+  // ----------------------------
+  const DANGER_ACTIONS = new Set(["front_flip", "back_flip", "left_flip", "front_pounce"]);
+  
+  const dangerModal = {
+    action: null,
+    open(action) {
+      this.action = action;
+      const overlay = document.getElementById("dangerModal");
+      const text = document.getElementById("dangerModalText");
+  
+      // Nice label
+      const label = action
+        .replaceAll("_", " ")
+        .replace(/\b\w/g, c => c.toUpperCase());
+  
+      text.textContent = `You are about to run: ${label}. This can be unsafe if the area isn’t clear.`;
+      overlay.style.display = "flex";
+    },
+    close() {
+      this.action = null;
+      document.getElementById("dangerModal").style.display = "none";
+    }
+  };
+  
+  async function postDangerAction(action) {
+    // Non-danger actions just go through normally
+    if (!DANGER_ACTIONS.has(action)) return postAction(action);
+  
+    if (!Go2Shared.ensureLoggedIn()) return;
+    if (!Go2Shared.state.COMMS_ENABLED) {
+      Go2Shared.setStatus("STOP latched 🔒", false, "Press RESUME to enable commands.");
+      return;
+    }
+  
+    dangerModal.open(action);
+  }
+  
+  function dangerModalCancel() {
+    dangerModal.close();
+  }
+  
+  async function dangerModalConfirm() {
+    const action = dangerModal.action;
+    dangerModal.close();
+    if (!action) return;
+  
+    // postAction already checks STOP latch and login, but keeping it simple:
+    await postAction(action);
+  }
+  
+  // Close modal on clicking the shaded background
+  document.addEventListener("click", (e) => {
+    const overlay = document.getElementById("dangerModal");
+    if (!overlay || overlay.style.display === "none") return;
+    if (e.target === overlay) dangerModal.close();
+  });
+  
+  // Close modal with ESC
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") dangerModal.close();
+  });
+
+  // ----------------------------
   // Exclusive toggles
   // ----------------------------
   const TOGGLES = [
@@ -241,6 +325,7 @@
     "toggle_freejump",
     "toggle_walkupright",
     "toggle_handstand",
+    "toggle_classicwalk"
   ];
   const toggleState = Object.fromEntries(TOGGLES.map(a => [a, false]));
 

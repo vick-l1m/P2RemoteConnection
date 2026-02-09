@@ -75,7 +75,7 @@ class WebRosBridge(Node):
         # Map subscriptions
         map_qos = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
-            durability=DurabilityPolicy.TRANSIENT_LOCAL,  # match your /map2d publisher
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,  # full map latched
             history=HistoryPolicy.KEEP_LAST,
             depth=1,
         )
@@ -85,12 +85,19 @@ class WebRosBridge(Node):
             history=HistoryPolicy.KEEP_LAST,
             depth=10,
         )
-
+        
+        # Declare parameters BEFORE get_parameter
+        self.declare_parameter("map_topic", "/map2d")
+        self.declare_parameter("map_updates_topic", "/map2d_updates")
+        
+        map_topic = self.get_parameter("map_topic").value
+        map_updates_topic = self.get_parameter("map_updates_topic").value
+        
         self.sub_map_full = self.create_subscription(
-            OccupancyGrid, "/map2d", self._on_map_full, map_qos
+            OccupancyGrid, map_topic, self._on_map_full, map_qos
         )
         self.sub_map_upd = self.create_subscription(
-            OccupancyGridUpdate, "/map2d_updates", self._on_map_update, upd_qos
+            OccupancyGridUpdate, map_updates_topic, self._on_map_update, upd_qos
         )
 
         self._loop: Optional[asyncio.AbstractEventLoop] = None

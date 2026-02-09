@@ -95,13 +95,14 @@ private:
   bool crossStep_flag_{false};
   bool freeJump_flag_{false};
   bool walkUpright_flag_{false};
+  bool classicWalk_flag_{false};
   bool handStand_flag_{false};
   bool is_sitting_{false};
   int  speed_level_index_{0}; // -1,0,1 cycling
 
   bool specialLocomotionActive() const {
     return freeBound_flag_ || freeAvoid_flag_ || crossStep_flag_ ||
-           freeJump_flag_ || walkUpright_flag_ || handStand_flag_;
+           freeJump_flag_ || walkUpright_flag_ || handStand_flag_ || classicWalk_flag_;
   }
   // ---------------- ROS ----------------
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr teleop_sub_;
@@ -181,6 +182,7 @@ private:
     if (a == "toggle_freejump")  { freeJump_flag_  = !freeJump_flag_;  sportClient_.FreeJump(req, freeJump_flag_);   return; }
     if (a == "toggle_walkupright"){ walkUpright_flag_= !walkUpright_flag_; sportClient_.WalkUpright(req, walkUpright_flag_); return; }
     if (a == "toggle_handstand") { handStand_flag_ = !handStand_flag_; sportClient_.HandStand(req, handStand_flag_); return; }
+    if (a == "toggle_classicwalk") { classicWalk_flag_ = !classicWalk_flag_; sportClient_.ClassicWalk(req, classicWalk_flag_); return;}
 
     if (a == "trot_run")      { sportClient_.TrotRun(req); return; }
     if (a == "economic_gait") { sportClient_.EconomicGait(req); return; }
@@ -213,6 +215,7 @@ private:
     if (a == "front_jump")  { sportClient_.FrontJump(req); return; }
     if (a == "front_flip")  { sportClient_.FrontFlip(req); return; }
     if (a == "back_flip")   { sportClient_.BackFlip(req); return; }
+    if (a == "left_flip") { sportClient_.LeftFlip(req); return; }
     if (a == "recovery")    { sportClient_.RecoveryStand(req); return; }
 
     // Unknown action: ignore

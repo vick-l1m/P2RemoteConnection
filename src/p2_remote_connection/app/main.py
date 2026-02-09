@@ -116,16 +116,16 @@ ALLOWED_ACTIONS = {
 
   # Movement-mode commands
   "toggle_freebound","toggle_freeavoid","toggle_crossstep","toggle_freejump",
-  "toggle_walkupright","toggle_handstand",
+  "toggle_walkupright","toggle_handstand", "toggle_classicwalk",
   "trot_run","economic_gait","switch_avoid","cycle_speed",
-  "stop_move","static_walk",
+  "stop_move","static_walk", "freewalk",
 
   # Posing-mode commands
   "damp","balance_stand",
 
   # Actions-mode commands
   "sit_toggle","hello","stretch","content","heart","scrape",
-  "front_pounce","front_jump","front_flip","back_flip","recovery"
+  "front_pounce","front_jump","front_flip","back_flip", "left_flip", "recovery"
 }
 
 @app.post("/actions/{action}")

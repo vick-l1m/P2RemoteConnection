@@ -5,80 +5,71 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Go2 Map Viewer</title>
 
+  <link rel="stylesheet" href="/app/static/shared.css" />
+  <script src="/app/static/shared.js"></script>
+
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 14px; }
-    .card { max-width: 960px; margin: 0 auto; border: 1px solid #ddd; border-radius: 16px; padding: 14px; }
-    h1 { margin: 0 0 10px; font-size: 20px; }
-
-    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-    input { padding: 10px; border-radius: 12px; border: 1px solid #ccc; flex: 1; min-width: 220px; font-size: 16px; }
-    button {
-      padding: 12px 12px; border-radius: 12px; border: 1px solid #ccc; background: #f7f7f7;
-      font-size: 16px; cursor: pointer; min-width: 120px;
-    }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
-    .danger { background: #fff1f1; border-color: #ffb3b3; }
-
-    .small { font-size: 13px; color: #555; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; white-space: pre-wrap; }
-
-    .status { margin-top: 12px; padding: 10px; border-radius: 12px; background: #fafafa; border: 1px solid #eee; }
-    .hint { margin-top: 6px; }
-
-    .mapPanel { margin-top: 12px; border: 1px solid #eee; border-radius: 16px; overflow: hidden; background:#fff; }
-    .mapHeader { display:flex; justify-content: space-between; align-items:center; padding: 10px 12px; background:#fafafa; border-bottom:1px solid #eee; }
+    /* Map-specific bits only (everything else comes from shared.css) */
+    .mapPanel { margin-top: 12px; border: 1px solid var(--soft-border); border-radius: var(--radius); overflow: hidden; background:#fff; }
+    .mapHeader { display:flex; justify-content: space-between; align-items:center; padding: 10px 12px; background: var(--soft-2); border-bottom:1px solid var(--soft-border); }
     .mapTitle { font-size:14px; font-weight:600; }
     .mapHint { color:#777; }
     .mapBox { padding: 12px; }
-    canvas { border: 1px solid #ddd; border-radius: 12px; width: 100%; height: auto; image-rendering: pixelated; background:#fff; }
-  </style>
+    .mapBox { padding: 12px; height: 72vh; min-height: 520px; } /* bigger map area */
+    #mapCanvas {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      width: 100%;
+      height: 100%;                 /* fill mapBox */
+      display: block;
+      image-rendering: pixelated;
+      background: #fff;
+    }
+    </style>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", async () => {
+      // Initialize shared behavior (auto defaultApi from UI host -> :8000)
+      await Go2Shared.init({ defaultApi: "", showAuthButtons: true });
+
+      // After init, if unlocked (auth disabled OR remembered token OK), start map
+      setTimeout(refreshSafetyStatus, 200);
+      setTimeout(() => startMapStreaming(true), 350);
+    });
+  </script>
 </head>
 
 <body>
-    <!-- LOGIN OVERLAY -->
-    <div id="loginOverlay" style="
-      position:fixed; inset:0; background:rgba(0,0,0,0.55);
-      display:flex; align-items:center; justify-content:center; z-index:9999;
-      pointer-events:auto;">
-      <div style="background:white; padding:16px; border-radius:16px; width:min(420px, 92vw);">
-        <h2 style="margin:0 0 10px; font-size:18px;">Connect to Go2</h2>
-        <div style="display:flex; flex-direction:column; gap:10px;">
-          <input id="loginBaseUrl" placeholder="http://robot-ip:8000 or https://robot.domain"
-                 style="padding:10px; border-radius:12px; border:1px solid #ccc; font-size:16px;"
-                 value="" />
+  <!-- LOGIN OVERLAY (shared.css styles) -->
+  <div id="loginOverlay" class="loginOverlay">
+    <div class="loginCard">
+      <h2>Connect to Go2</h2>
+      <div class="loginForm">
+        <input id="loginBaseUrl" placeholder="http://robot-ip:8000 or https://robot.domain" />
+        <input id="loginToken" placeholder="Password" type="password" />
 
-          <input id="loginToken" placeholder="Password" type="password"
-                 style="padding:10px; border-radius:12px; border:1px solid #ccc; font-size:16px;" />
+        <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#333;">
+          <input id="showPw" type="checkbox" onclick="Go2Shared.togglePasswordVisibility()" />
+          Show password
+        </label>
 
-          <!-- ✅ Show password -->
-          <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#333;">
-            <input id="showPw" type="checkbox" onclick="togglePasswordVisibility()" />
-            Show password
-          </label>
-
-          <!-- ✅ Enter-to-unlock uses this id -->
-          <button id="unlockBtn" onclick="login()"
-                  style="padding:12px; border-radius:12px; border:1px solid #ccc; background:#f7f7f7; font-size:16px;">
-            Unlock
-          </button>
-
-          <div id="loginMsg" style="font-size:13px; color:#b00020;"></div>
-          <div style="font-size:12px; color:#555;">Tip: This password is unique per robot.</div>
-        </div>
+        <button id="unlockBtn" onclick="Go2Shared.login()">Unlock</button>
+        <div id="loginMsg" class="loginMsg"></div>
+        <div class="loginTip">Tip: This password is unique per robot.</div>
       </div>
     </div>
-
+  </div>
 
   <!-- MAIN APP -->
-  <div id="appRoot" style="filter: blur(6px); pointer-events:none; user-select:none;">
-    <div class="card">
+  <div id="appRoot">
+      <div class="card">
       <h1>Unitree Go2 – Map Viewer</h1>
 
       <div class="row">
         <input id="baseUrl" placeholder="http://<go2-ip>:8000" />
-        <button onclick="checkHealth()">Health</button>
+        <button onclick="Go2Shared.checkHealth()">Health</button>
         <button id="safetyToggleBtn" class="danger" onclick="toggleSafety()">STOP</button>
-        <button onclick="logout()">Logout</button>
+        <button onclick="Go2Shared.logout()">Logout</button>
       </div>
 
       <div class="small hint">
@@ -107,353 +98,130 @@
     </div>
   </div>
 
-  <script>
+<script>
   // ----------------------------
-  // Auth + local storage (same keys as your terminal page)
+  // STOP/RESUME latch (same idea as your other pages)
   // ----------------------------
-  let AUTH_TOKEN = "";
-  let ROBOT_BASE_URL = "";
-  let COMMS_ENABLED = true;
-
-  const LS_URL_KEY = "go2_baseUrl";
-  const LS_TOKEN_KEY = "go2_token";
-
-  function baseUrl() {
-    return (ROBOT_BASE_URL || document.getElementById("baseUrl").value || "")
-      .trim()
-      .replace(/\/+$/, "");
-  }
-
-  function authHeaders() {
-    return AUTH_TOKEN ? { "Authorization": `Bearer ${AUTH_TOKEN}` } : {};
-  }
-
-  function lockUI() {
-    document.getElementById("loginOverlay").style.display = "flex";
-    const root = document.getElementById("appRoot");
-    root.style.filter = "blur(6px)";
-    root.style.pointerEvents = "none";
-    root.style.userSelect = "none";
-  }
-
-  function unlockUI() {
-    document.getElementById("loginOverlay").style.display = "none";
-    const root = document.getElementById("appRoot");
-    root.style.filter = "none";
-    root.style.pointerEvents = "auto";
-    root.style.userSelect = "auto";
-  }
-
-  function saveAuth() {
-    localStorage.setItem(LS_URL_KEY, ROBOT_BASE_URL);
-    localStorage.setItem(LS_TOKEN_KEY, AUTH_TOKEN);
-  }
-
-  function loadAuth() {
-    return {
-      u: localStorage.getItem(LS_URL_KEY) || "",
-      t: localStorage.getItem(LS_TOKEN_KEY) || ""
-    };
-  }
-
-  function clearAuth() {
-    localStorage.removeItem(LS_URL_KEY);
-    localStorage.removeItem(LS_TOKEN_KEY);
-  }
-
-  function ensureLoggedIn() {
-    if (!ROBOT_BASE_URL || !AUTH_TOKEN) {
-      const msg = document.getElementById("loginMsg");
-      if (msg) msg.textContent = "Please log in.";
-      lockUI();
-      return false;
-    }
-    return true;
-  }
-
-  async function login() {
-    const msg = document.getElementById("loginMsg");
-    msg.textContent = "";
-
-    const url = document.getElementById("loginBaseUrl").value.trim().replace(/\/+$/, "");
-    const token = document.getElementById("loginToken").value.trim();
-
-    if (!url || !token) {
-      msg.textContent = "Please enter robot URL and password.";
-      lockUI();
-      return;
-    }
-
-    ROBOT_BASE_URL = url;
-    AUTH_TOKEN = token;
-
-    document.getElementById("baseUrl").value = ROBOT_BASE_URL;
-    document.getElementById("apiHost").textContent = ROBOT_BASE_URL;
-
-    try {
-      const r = await httpGet("/health");
-      if (!r.ok) {
-        msg.textContent = (r.status === 401 || r.status === 403)
-          ? "Incorrect token entered."
-          : `Login failed (HTTP ${r.status})`;
-        AUTH_TOKEN = "";
-        ROBOT_BASE_URL = "";
-        clearAuth();
-        lockUI();
-        return;
-      }
-
-      saveAuth();
-      unlockUI();
-      setStatus("Unlocked ✅", true);
-      await refreshSafetyStatus();
-
-      if (COMMS_ENABLED && !stopLatched) {
-        await startMapStreaming(true);
-      } else {
-        setMapHint("STOP latched: map paused");
-      }
-    } catch (e) {
-      msg.textContent = "Login error: " + (e?.message || String(e));
-      lockUI();
-    }
-  }
-
-  function logout() {
-    stopMapStreaming();
-    AUTH_TOKEN = "";
-    ROBOT_BASE_URL = "";
-    COMMS_ENABLED = true;
-    clearAuth();
-  
-    const t = document.getElementById("loginToken");
-    if (t) t.value = "";
-  
-    const cb = document.getElementById("showPw");
-    if (cb) cb.checked = false;
-    if (t) t.type = "password";
-  
-    lockUI();
-    setStatus("Logged out.", true);
-  }
-
-  function togglePasswordVisibility() {
-    const pw = document.getElementById("loginToken");
-    const cb = document.getElementById("showPw");
-    if (!pw || !cb) return;
-    pw.type = cb.checked ? "text" : "password";
-  }
-  
-  function wireEnterToUnlock() {
-    const urlEl = document.getElementById("loginBaseUrl");
-    const passEl = document.getElementById("loginToken");
-    const btn = document.getElementById("unlockBtn");
-  
-    const handler = (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        if (btn) btn.click();
-        else login();
-      }
-    };
-  
-    if (urlEl)  urlEl.addEventListener("keydown", handler);
-    if (passEl) passEl.addEventListener("keydown", handler);
-  }
-  
-  function computeDefaultApi() {
-    // UI opened like http(s)://<host>:<port>/... => default API is same host on :8000
-    const host = window.location.hostname;
-    const apiPort = 8000;
-    const proto = window.location.protocol; // "http:" or "https:"
-    return `${proto}//${host}:${apiPort}`;
-  }
-
-  // ----------------------------
-  // Status UI
-  // ----------------------------
-  function setStatus(text, ok=true, detail="") {
-    const msg = document.getElementById("msg");
-    const detailEl = document.getElementById("detail");
-    msg.textContent = text;
-    msg.style.color = ok ? "#0a7a0a" : "#b00020";
-    detailEl.textContent = detail || "";
-    const apiHost = document.getElementById("apiHost");
-    if (apiHost) apiHost.textContent = baseUrl();
-  }
+  let stopLatched = false;
+  let safetyBusy = false;
 
   function setMapHint(t) {
     const el = document.getElementById("mapHint");
     if (el) el.textContent = t;
   }
 
-  // ----------------------------
-  // Network helpers
-  // ----------------------------
-  function commsAllowed(path) {
-    if (path === "/health") return true;
-    if (path.startsWith("/safety/")) return true;
-    if (path.startsWith("/map2d/")) return COMMS_ENABLED;
-    return COMMS_ENABLED;
-  }
-
-  async function httpGet(path) {
-    if (!commsAllowed(path)) {
-      return { ok:false, status: 0, text: "Comms disabled (STOP latched)", url: baseUrl() + path };
-    }
-    const url = baseUrl() + path;
-    const r = await fetch(url, { headers: authHeaders() });
-
-    if (r.status === 401 || r.status === 403) {
-      AUTH_TOKEN = "";
-      ROBOT_BASE_URL = "";
-      clearAuth();
-      lockUI();
-      const msg = document.getElementById("loginMsg");
-      if (msg) msg.textContent = "Invalid token. Please log in again.";
-    }
-
-    const t = await r.text();
-    return { ok: r.ok, status: r.status, text: t, url, raw: r };
-  }
-
-  async function httpPost(path, json=null) {
-    if (!commsAllowed(path)) {
-      return { ok:false, status: 0, text: "Comms disabled (STOP latched)", url: baseUrl() + path };
-    }
-    const url = baseUrl() + path;
-    const headers = { ...authHeaders() };
-    if (json) headers["Content-Type"] = "application/json";
-    const r = await fetch(url, { method:"POST", headers, body: json ? JSON.stringify(json) : null });
-
-    if (r.status === 401 || r.status === 403) {
-      AUTH_TOKEN = "";
-      ROBOT_BASE_URL = "";
-      clearAuth();
-      lockUI();
-      const msg = document.getElementById("loginMsg");
-      if (msg) msg.textContent = "Invalid token. Please log in again.";
-    }
-
-    const t = await r.text();
-    return { ok: r.ok, status: r.status, text: t, url };
-  }
-
-  async function checkHealth() {
-    if (!ensureLoggedIn()) return;
-    setStatus("Checking /health...");
-    try {
-      const r = await httpGet("/health");
-      setStatus(
-        r.ok ? "Health OK ✅" : `Health failed (HTTP ${r.status})`,
-        r.ok,
-        `URL: ${r.url}\n${r.text}`
-      );
-    } catch (e) {
-      setStatus("Health network error", false, `API base was: ${baseUrl()}\n${String(e)}`);
-    }
-  }
-
-  // ----------------------------
-  // STOP/RESUME latch
-  // ----------------------------
-  let stopLatched = false;
-
   function setSafetyButton(latched) {
-    const btn = document.getElementById("safetyToggleBtn");
     stopLatched = !!latched;
-
+    const btn = document.getElementById("safetyToggleBtn");
     if (!btn) return;
-    if (stopLatched) {
-      btn.textContent = "RESUME";
-      btn.classList.remove("danger");
-    } else {
-      btn.textContent = "STOP";
-      btn.classList.add("danger");
-    }
+    btn.textContent = stopLatched ? "RESUME" : "STOP";
+    btn.classList.toggle("danger", !stopLatched);
+    btn.disabled = safetyBusy;
   }
 
   async function refreshSafetyStatus() {
-    if (!ensureLoggedIn()) return;
-    const r = await httpGet("/safety/status");
+    if (!Go2Shared.ensureLoggedIn()) return;
+    const r = await Go2Shared.httpGet("/safety/status", { bypassCommsGate: true });
     if (r.ok) {
       try {
         const data = JSON.parse(r.text);
         setSafetyButton(!!data.stop_latched);
-        COMMS_ENABLED = !stopLatched;
-      } catch (_) {}
+        Go2Shared.state.COMMS_ENABLED = !stopLatched;
+      } catch {}
     }
+    return r;
   }
 
   async function toggleSafety() {
-    if (!ensureLoggedIn()) return;
+    if (!Go2Shared.ensureLoggedIn() || safetyBusy) return;
+    safetyBusy = true;
+    setSafetyButton(stopLatched);
 
-    // STOP
-    if (!stopLatched) {
-      const r = await httpPost("/safety/stop");
-      COMMS_ENABLED = false;
-      setSafetyButton(true);
-      stopMapStreaming();
-      setMapHint("STOP latched: map paused");
-
-      setStatus(
-        r.ok ? "STOP latched 🔒 (map paused)" : `STOP failed (HTTP ${r.status})`,
-        r.ok,
-        `URL: ${r.url}\n${r.text}`
-      );
-      return;
-    }
-
-    // RESUME
-    const r2 = await httpPost("/safety/resume");
-    if (r2.ok) {
-      COMMS_ENABLED = true;
-      setSafetyButton(false);
-      setStatus("RESUME ✅ (map resumed)", true, `URL: ${r2.url}\n${r2.text}`);
-      setMapHint("Resuming map...");
-      await startMapStreaming(true);
-      await refreshSafetyStatus();
-    } else {
-      setStatus(`RESUME failed (HTTP ${r2.status})`, false, `URL: ${r2.url}\n${r2.text}`);
+    try {
+      if (!stopLatched) {
+        const r = await Go2Shared.httpPost("/safety/stop", null, { bypassCommsGate: true });
+        if (!r.ok) { Go2Shared.setStatus(`STOP failed (HTTP ${r.status})`, false, `URL: ${r.url}\n${r.text}`); return; }
+        Go2Shared.state.COMMS_ENABLED = false;
+        setSafetyButton(true);
+        stopMapStreaming();
+        setMapHint("STOP latched: map paused");
+        Go2Shared.setStatus("STOP latched 🔒 (map paused)", true, `URL: ${r.url}\n${r.text}`);
+      } else {
+        const r2 = await Go2Shared.httpPost("/safety/resume", null, { bypassCommsGate: true });
+        if (!r2.ok) { Go2Shared.setStatus(`RESUME failed (HTTP ${r2.status})`, false, `URL: ${r2.url}\n${r2.text}`); return; }
+        Go2Shared.state.COMMS_ENABLED = true;
+        setSafetyButton(false);
+        setMapHint("Resuming map...");
+        Go2Shared.setStatus("RESUME ✅ (map resumed)", true, `URL: ${r2.url}\n${r2.text}`);
+        await startMapStreaming(true);
+        await refreshSafetyStatus();
+      }
+    } finally {
+      safetyBusy = false;
+      setSafetyButton(stopLatched);
     }
   }
 
   // ----------------------------
-  // Map viewer (OccupancyGrid full + OccupancyGridUpdate patches)
+  // Map viewer (OccupancyGrid full + update patches)
   // ----------------------------
-  const canvas = document.getElementById("mapCanvas");
-  const ctx = canvas.getContext("2d", { willReadFrequently: false });
+  let canvas, ctx;
 
   let MAP_META = null;
   let MAP_GRID = null;   // Int8Array
   let IMG = null;        // ImageData at 1:1 map resolution
-  let SCALE = 2;         // px per cell
+  let SCALE = 20;         // px per cell
   let MAP_WS = null;
   let pendingHeader = null;
+  let keepaliveTimer = null;
 
-  function apiWsBase() {
-    const api = baseUrl();
-    const u = new URL(api);
-    const wsProto = u.protocol === "https:" ? "wss" : "ws";
-    return `${wsProto}://${u.host}`;
-  }
+  let OFF = null, OFF_CTX = null; // persistent offscreen
+  let view = { scale: 3.0, ox: 0, oy: 0, dragging: false, lx: 0, ly: 0 };
 
-  function setCanvasSize(w, h) {
-    canvas.width = w * SCALE;
-    canvas.height = h * SCALE;
+  function resizeDisplayCanvas() {
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.max(1, Math.floor(rect.width));
+    canvas.height = Math.max(1, Math.floor(rect.height));
     ctx.imageSmoothingEnabled = false;
   }
 
   function valToRGBA(v, out, idx) {
-    // -1 unknown => mid gray, 0 free => white, 1..100 => darker
-    let c;
-    if (v === -1) c = 180;
-    else if (v === 0) c = 255;
-    else c = Math.max(0, 255 - Math.floor((v / 100) * 255));
-    out[idx+0] = c;
-    out[idx+1] = c;
-    out[idx+2] = c;
-    out[idx+3] = 255;
+    // v is int8: -1, 0..100
+    // Color plan:
+    //  - unknown (-1): medium gray
+    //  - free (0): near white
+    //  - occupied (>= threshold): very dark
+    //  - occupied (< threshold): dark gray ramp so even weak hits show
+  
+    const UNKNOWN = 170;      // gray
+    const FREE = 245;         // near-white
+    const OCC_DARK = 20;      // strong occupied
+    const THRESH = 8;         // treat >=8 as occupied (tune 5..20)
+  
+    let r, g, b, a = 255;
+  
+    if (v === -1) {
+      r = g = b = UNKNOWN;
+    } else if (v === 0) {
+      r = g = b = FREE;
+    } else {
+      const occ = Math.max(0, Math.min(100, v));
+      if (occ >= THRESH) {
+        // Make occupied pop hard
+        r = g = b = OCC_DARK;
+      } else {
+        // Still visible for small values (darker than FREE)
+        // occ in [1..THRESH-1] maps to [120..60] approx
+        const t = occ / THRESH;
+        const c = Math.round(120 - 60 * t);
+        r = g = b = c;
+      }
+    }
+  
+    out[idx + 0] = r;
+    out[idx + 1] = g;
+    out[idx + 2] = b;
+    out[idx + 3] = a;
   }
 
   async function gunzipToBytes(gzBytes) {
@@ -468,31 +236,136 @@
     return new Int8Array(u8.buffer, u8.byteOffset, u8.byteLength);
   }
 
+  function ensureOffscreen(w, h) {
+  if (OFF && OFF.width === w && OFF.height === h) return;
+
+  OFF = new OffscreenCanvas(w, h);
+  OFF_CTX = OFF.getContext("2d");
+  OFF_CTX.imageSmoothingEnabled = false;
+
+  // Reset view when map size changes
+  view.scale = 1.5;
+  view.ox = 0;
+  view.oy = 0;
+}
+
+function resizeDisplayCanvas() {
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.max(1, Math.floor(rect.width));
+  canvas.height = Math.max(1, Math.floor(rect.height));
+  ctx.imageSmoothingEnabled = false;
+}
+
+function clampView() {
+  if (!OFF) return;
+  const vw = canvas.width / view.scale;
+  const vh = canvas.height / view.scale;
+
+  // Clamp panning to map bounds
+  view.ox = Math.max(0, Math.min(OFF.width - vw, view.ox));
+  view.oy = Math.max(0, Math.min(OFF.height - vh, view.oy));
+}
+
+function renderView() {
+  if (!OFF) return;
+  clampView();
+
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const sx = view.ox;
+  const sy = view.oy;
+  const sw = canvas.width / view.scale;
+  const sh = canvas.height / view.scale;
+
+  ctx.drawImage(OFF, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+}
+
+let panZoomInstalled = false;
+function installPanZoom() {
+  if (panZoomInstalled) return;
+  panZoomInstalled = true;
+
+  // Wheel zoom (zoom around cursor)
+  canvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    if (!OFF) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    const worldX = view.ox + mx / view.scale;
+    const worldY = view.oy + my / view.scale;
+
+    const factor = (e.deltaY < 0) ? 1.15 : (1 / 1.15);
+    const newScale = Math.max(0.5, Math.min(30, view.scale * factor));
+
+    view.scale = newScale;
+    view.ox = worldX - mx / view.scale;
+    view.oy = worldY - my / view.scale;
+
+    renderView();
+  }, { passive: false });
+
+  // Drag pan
+  canvas.addEventListener("mousedown", (e) => {
+    view.dragging = true;
+    view.lx = e.clientX;
+    view.ly = e.clientY;
+  });
+
+  window.addEventListener("mouseup", () => {
+    view.dragging = false;
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (!view.dragging) return;
+    const dx = e.clientX - view.lx;
+    const dy = e.clientY - view.ly;
+    view.lx = e.clientX;
+    view.ly = e.clientY;
+
+    view.ox -= dx / view.scale;
+    view.oy -= dy / view.scale;
+    renderView();
+  });
+
+  // Keep canvas matching container
+  window.addEventListener("resize", () => {
+    if (!canvas) return;
+    resizeDisplayCanvas();
+    renderView();
+  });
+}
+
   function drawFull() {
     if (!MAP_META || !MAP_GRID) return;
-
+  
     const w = MAP_META.width, h = MAP_META.height;
-    setCanvasSize(w, h);
-
-    IMG = ctx.createImageData(w, h);
+    ensureOffscreen(w, h);
+  
+    // Build image once in memory (IMG is full map resolution)
+    IMG = OFF_CTX.createImageData(w, h);
     const out = IMG.data;
-
+  
     for (let i = 0; i < MAP_GRID.length; i++) {
       valToRGBA(MAP_GRID[i], out, i * 4);
     }
-
-    const off = new OffscreenCanvas(w, h);
-    const octx = off.getContext("2d");
-    octx.putImageData(IMG, 0, 0);
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(off, 0, 0, w, h, 0, 0, canvas.width, canvas.height);
+  
+    // Store full raster into OFF for fast view rendering
+    OFF_CTX.putImageData(IMG, 0, 0);
+  
+    // Display canvas matches panel size, and we render a viewport of OFF
+    resizeDisplayCanvas();
+    renderView();
   }
 
   function drawROI(x, y, w, h) {
-    if (!IMG || !MAP_META || !MAP_GRID) return;
-
+    if (!IMG || !MAP_META || !MAP_GRID || !OFF_CTX) return;
+  
     const out = IMG.data;
+  
     for (let j = 0; j < h; j++) {
       for (let i = 0; i < w; i++) {
         const gx = x + i;
@@ -501,21 +374,15 @@
         valToRGBA(MAP_GRID[gidx], out, gidx * 4);
       }
     }
-
-    const off = new OffscreenCanvas(MAP_META.width, MAP_META.height);
-    const octx = off.getContext("2d");
-    octx.putImageData(IMG, 0, 0);
-
-    ctx.drawImage(
-      off,
-      x, y, w, h,
-      x * SCALE, y * SCALE, w * SCALE, h * SCALE
-    );
+  
+    OFF_CTX.putImageData(IMG, 0, 0);
+    renderView();
   }
 
   async function loadInitialMap() {
-    const url = baseUrl() + "/map2d/full";
-    const r = await fetch(url, { headers: authHeaders() });
+    // Use shared auth headers + base URL
+    const url = Go2Shared.baseUrl() + "/map2d/full";
+    const r = await fetch(url, { headers: Go2Shared.authHeaders() });
 
     if (r.status === 204) throw new Error("No map yet");
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -524,12 +391,11 @@
     const height = parseInt(r.headers.get("x-map-height"), 10);
 
     if (!Number.isFinite(width) || !Number.isFinite(height)) {
-      throw new Error(
-        `Invalid map headers: width=${width}, height=${height}`
-      );
+      throw new Error(`Invalid map headers: width=${width}, height=${height}`);
     }
-    
-    const MAP_META = {
+
+    // IMPORTANT: assign to global MAP_META (no shadowing)
+    MAP_META = {
       frame_id: r.headers.get("x-map-frame") || "",
       resolution: parseFloat(r.headers.get("x-map-resolution") || "0.0"),
       width,
@@ -542,14 +408,8 @@
     const buf = new Uint8Array(await r.arrayBuffer());
 
     let rawU8;
-    try {
-      // Try gzip decode (works when server sends raw gz bytes)
-      rawU8 = await gunzipToBytes(buf);
-    } catch (e) {
-      // If browser already decompressed (because Content-Encoding was set),
-      // then buf is already the raw int8 map
-      rawU8 = buf;
-    }
+    try { rawU8 = await gunzipToBytes(buf); }
+    catch { rawU8 = buf; }
 
     MAP_GRID = u8ToI8(rawU8);
 
@@ -561,23 +421,27 @@
   }
 
   function stopMapStreaming() {
-    try { if (MAP_WS && MAP_WS.readyState === WebSocket.OPEN) MAP_WS.close(); } catch (_) {}
+    try { if (MAP_WS) MAP_WS.close(); } catch {}
     MAP_WS = null;
     pendingHeader = null;
+    if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
   }
 
   async function connectMapWS() {
-    // Auth via query token (matches your terminal scheme)
-    const wsUrl = `${apiWsBase()}/ws/map2d?token=${encodeURIComponent(AUTH_TOKEN)}`;
+    // Use shared WS base; include token only if auth enabled.
+    let wsUrl = `${Go2Shared.apiWsBase()}/ws/map2d`;
+    if (Go2Shared.cfg.authEnabled) {
+      if (!Go2Shared.state.AUTH_TOKEN) throw new Error("Login required");
+      wsUrl += `?token=${encodeURIComponent(Go2Shared.state.AUTH_TOKEN)}`;
+    }
+
     MAP_WS = new WebSocket(wsUrl);
     MAP_WS.binaryType = "arraybuffer";
 
-    MAP_WS.onopen = () => {
-      setMapHint("Map live ✅ (updates connected)");
-    };
+    MAP_WS.onopen = () => setMapHint("Map live ✅ (updates connected)");
 
     MAP_WS.onmessage = async (ev) => {
-      if (!COMMS_ENABLED || stopLatched) return;
+      if (!Go2Shared.state.COMMS_ENABLED || stopLatched) return;
 
       if (typeof ev.data === "string") {
         pendingHeader = JSON.parse(ev.data);
@@ -598,9 +462,9 @@
         drawFull();
       } else if (h.t === "u") {
         if (!MAP_META || !MAP_GRID) return;
+
         const x = h.x|0, y = h.y|0, w = h.w|0, hh = h.h|0;
 
-        // Blit row-wise into global map buffer
         let k = 0;
         for (let row = 0; row < hh; row++) {
           const dstStart = (y + row) * MAP_META.width + x;
@@ -612,27 +476,32 @@
       }
     };
 
-    MAP_WS.onclose = () => {
-      setMapHint((COMMS_ENABLED && !stopLatched) ? "Map updates disconnected" : "Map paused");
-    };
+    MAP_WS.onclose = () => setMapHint((Go2Shared.state.COMMS_ENABLED && !stopLatched) ? "Map updates disconnected" : "Map paused");
+    MAP_WS.onerror = () => setMapHint("Map WS error");
 
-    MAP_WS.onerror = () => {
-      setMapHint("Map WS error");
-    };
-
-    // Keepalive ping so the server has something to receive
-    setInterval(() => {
+    // One keepalive timer per connection
+    keepaliveTimer = setInterval(() => {
       if (MAP_WS && MAP_WS.readyState === WebSocket.OPEN) {
-        try { MAP_WS.send("ping"); } catch (_) {}
+        try { MAP_WS.send("ping"); } catch {}
       }
     }, 10000);
   }
 
   async function startMapStreaming(forceReloadFull = false) {
-    if (!ensureLoggedIn()) return;
-    if (!COMMS_ENABLED || stopLatched) {
+    if (!Go2Shared.ensureLoggedIn()) return;
+
+    // If STOP latched, pause
+    if (!Go2Shared.state.COMMS_ENABLED || stopLatched) {
       setMapHint("STOP latched: map paused");
       return;
+    }
+
+    // Ensure canvas exists (after DOM)
+    if (!canvas) {
+      canvas = document.getElementById("mapCanvas");
+      ctx = canvas.getContext("2d", { willReadFrequently: false });
+      installPanZoom();
+      resizeDisplayCanvas();
     }
 
     stopMapStreaming();
@@ -645,52 +514,9 @@
       await connectMapWS();
     } catch (e) {
       setMapHint("Map not available yet");
-      setStatus("Map load failed", false, String(e));
+      Go2Shared.setStatus("Map load failed", false, String(e));
     }
   }
-
-  // ----------------------------
-  // Boot: restore saved creds
-  // ----------------------------
-  window.addEventListener("DOMContentLoaded", async () => {
-    wireEnterToUnlock();
-  
-    const defaultApi = computeDefaultApi();
-    document.getElementById("uiHost").textContent = location.origin;
-  
-    document.getElementById("loginBaseUrl").value = defaultApi;
-    document.getElementById("baseUrl").value = defaultApi;
-    document.getElementById("apiHost").textContent = defaultApi;
-  
-    const { u, t } = loadAuth();
-    if (u && t) {
-      document.getElementById("loginBaseUrl").value = u;
-      document.getElementById("loginToken").value = t;
-  
-      ROBOT_BASE_URL = u;
-      AUTH_TOKEN = t;
-  
-      const r = await httpGet("/health").catch(() => null);
-      if (r && r.ok) {
-        unlockUI();
-        setStatus("Unlocked ✅ (remembered)", true);
-        await refreshSafetyStatus();
-      
-        if (COMMS_ENABLED && !stopLatched) {
-          await startMapStreaming(true);
-        } else {
-          setMapHint("STOP latched: map paused");
-        }
-        return;
-      }
-  
-      AUTH_TOKEN = "";
-      ROBOT_BASE_URL = "";
-      clearAuth();
-    }
-  
-    lockUI();
-  });
-  </script>
+</script>
 </body>
 </html>

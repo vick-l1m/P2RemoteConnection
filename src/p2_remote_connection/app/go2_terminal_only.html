@@ -1,4 +1,3 @@
-<!-- go2_terminal_only.html -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -6,34 +5,37 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Go2 Terminal</title>
 
+  <link rel="stylesheet" href="/app/static/shared.css" />
+  <script src="/app/static/shared.js"></script>
+
+  <!-- xterm -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 14px; }
-    .card { max-width: 980px; margin: 0 auto; border: 1px solid #ddd; border-radius: 16px; padding: 14px; }
-    h1 { margin: 0 0 10px; font-size: 20px; }
-
-    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-    input { padding: 10px; border-radius: 12px; border: 1px solid #ccc; flex: 1; min-width: 220px; font-size: 16px; }
-    button {
-      padding: 12px 12px; border-radius: 12px; border: 1px solid #ccc; background: #f7f7f7;
-      font-size: 16px; cursor: pointer; min-width: 120px;
-    }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
-    .danger { background: #fff1f1; border-color: #ffb3b3; }
-
-    .small { font-size: 13px; color: #555; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; white-space: pre-wrap; }
-    .status { margin-top: 12px; padding: 10px; border-radius: 12px; background: #fafafa; border: 1px solid #eee; }
-    .hint { margin-top: 6px; }
-
-    /* Multi-terminal responsive layout (no squashing) */
+    /* Terminal-only extras (layout + xterm panels) */
     .termGrid {
       margin-top: 12px;
       display: grid;
       gap: 12px;
       grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
     }
-    .termPanel { border: 1px solid #eee; border-radius: 16px; background: #0f0f0f; overflow: hidden; min-width: 520px; }
-    .termHeader { display:flex; justify-content: space-between; align-items:center; padding: 10px 12px; background:#171717; border-bottom:1px solid #2a2a2a; }
+    .termPanel {
+      min-width: 520px;
+      border: 1px solid var(--soft-border);
+      border-radius: var(--radius);
+      background: #0f0f0f;
+      overflow: hidden;
+    }
+    .termHeader {
+      display:flex;
+      justify-content: space-between;
+      align-items:center;
+      padding: 10px 12px;
+      background:#171717;
+      border-bottom: 1px solid #2a2a2a;
+    }
     .termTitle { color:#fff; font-size:14px; font-weight:600; }
     .termHint { color:#bbb; }
     .termBox {
@@ -44,57 +46,52 @@
     }
   </style>
 
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css" />
-  <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+  <script>
+    window.addEventListener("DOMContentLoaded", async () => {
+      await Go2Shared.init({ defaultApi: "", showAuthButtons: true });
+      updateTerminalsWrapVisibility();
+      setTimeout(refreshSafetyStatus, 200);
+    });
+  </script>
 </head>
 
 <body>
-  <!-- LOGIN OVERLAY (outside appRoot so it can receive clicks) -->
-  <div id="loginOverlay" style="
-    position:fixed; inset:0; background:rgba(0,0,0,0.55);
-    display:flex; align-items:center; justify-content:center; z-index:9999;
-    pointer-events:auto;">
-    <div style="background:white; padding:16px; border-radius:16px; width:min(420px, 92vw);">
-      <h2 style="margin:0 0 10px; font-size:18px;">Connect to Go2</h2>
-
-      <div style="display:flex; flex-direction:column; gap:10px;">
-        <input id="loginBaseUrl" placeholder="http://robot-ip:8000 or https://robot.domain"
-               style="padding:10px; border-radius:12px; border:1px solid #ccc; font-size:16px;"
-               value="" />
-
-        <input id="loginToken" placeholder="Password" type="password"
-               style="padding:10px; border-radius:12px; border:1px solid #ccc; font-size:16px;" />
+  <!-- LOGIN OVERLAY (shared.css styles) -->
+  <div id="loginOverlay" class="loginOverlay">
+    <div class="loginCard">
+      <h2>Connect to Go2</h2>
+      <div class="loginForm">
+        <input id="loginBaseUrl" placeholder="http://robot-ip:8000 or https://robot.domain"/>
+        <input id="loginToken" placeholder="Password" type="password" />
 
         <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#333;">
-          <input id="showPw" type="checkbox" onclick="togglePasswordVisibility()" />
+          <input id="showPw" type="checkbox" onclick="Go2Shared.togglePasswordVisibility()" />
           Show password
         </label>
 
-        <button id="unlockBtn" onclick="login()"
-                style="padding:12px; border-radius:12px; border:1px solid #ccc; background:#f7f7f7; font-size:16px;">
-          Unlock
-        </button>
-
-        <div id="loginMsg" style="font-size:13px; color:#b00020;"></div>
-        <div style="font-size:12px; color:#555;">Tip: This password is unique per robot.</div>
+        <button id="unlockBtn" onclick="Go2Shared.login()">Unlock</button>
+        <div id="loginMsg" class="loginMsg"></div>
+        <div class="loginTip">Tip: This password is unique per robot.</div>
       </div>
     </div>
   </div>
 
-  <!-- MAIN APP (locked/blurred until login) -->
-  <div id="appRoot" style="filter: blur(6px); pointer-events:none; user-select:none;">
+  <!-- MAIN APP -->
+  <div id="appRoot">
     <div class="card">
       <h1>Unitree Go2 – Terminal</h1>
 
       <div class="row">
         <input id="baseUrl" placeholder="http://<go2-ip>:8000" />
-        <button onclick="checkHealth()">Health</button>
+        <button onclick="Go2Shared.checkHealth()">Health</button>
+
         <button id="safetyToggleBtn" class="danger" onclick="toggleSafety()">STOP</button>
+
         <button id="termBtn1" onclick="toggleTerminalN(1)">Terminal 1</button>
         <button id="termBtn2" onclick="toggleTerminalN(2)">Terminal 2</button>
         <button id="termBtn3" onclick="toggleTerminalN(3)">Terminal 3</button>
-        <button onclick="logout()">Logout</button>
+
+        <button onclick="Go2Shared.logout()">Logout</button>
       </div>
 
       <div class="small hint">
@@ -139,358 +136,72 @@
     </div>
   </div>
 
-  <script>
+<script>
   // ----------------------------
-  // Auth + local storage
+  // STOP/RESUME latch (shared comms gate)
   // ----------------------------
-  let COMMS_ENABLED = true;
-
-  let AUTH_TOKEN = "";
-  let ROBOT_BASE_URL = "";
-
-  const LS_URL_KEY = "go2_baseUrl";
-  const LS_TOKEN_KEY = "go2_token";
-
-  function baseUrl() {
-    return (ROBOT_BASE_URL || document.getElementById("baseUrl").value || "")
-      .trim()
-      .replace(/\/+$/, "");
-  }
-
-  function authHeaders() {
-    return AUTH_TOKEN ? { "Authorization": `Bearer ${AUTH_TOKEN}` } : {};
-  }
-
-  function lockUI() {
-    document.getElementById("loginOverlay").style.display = "flex";
-    const root = document.getElementById("appRoot");
-    root.style.filter = "blur(6px)";
-    root.style.pointerEvents = "none";
-    root.style.userSelect = "none";
-  }
-
-  function unlockUI() {
-    document.getElementById("loginOverlay").style.display = "none";
-    const root = document.getElementById("appRoot");
-    root.style.filter = "none";
-    root.style.pointerEvents = "auto";
-    root.style.userSelect = "auto";
-  }
-
-  function saveAuth() {
-    localStorage.setItem(LS_URL_KEY, ROBOT_BASE_URL);
-    localStorage.setItem(LS_TOKEN_KEY, AUTH_TOKEN);
-  }
-
-  function loadAuth() {
-    const u = localStorage.getItem(LS_URL_KEY) || "";
-    const t = localStorage.getItem(LS_TOKEN_KEY) || "";
-    return { u, t };
-  }
-
-  function clearAuth() {
-    localStorage.removeItem(LS_URL_KEY);
-    localStorage.removeItem(LS_TOKEN_KEY);
-  }
-
-  function togglePasswordVisibility() {
-    const pw = document.getElementById("loginToken");
-    const cb = document.getElementById("showPw");
-    if (!pw || !cb) return;
-    pw.type = cb.checked ? "text" : "password";
-  }
-
-  function ensureLoggedIn() {
-    if (!ROBOT_BASE_URL || !AUTH_TOKEN) {
-      const msg = document.getElementById("loginMsg");
-      if (msg) msg.textContent = "Please log in.";
-      lockUI();
-      return false;
-    }
-    return true;
-  }
-
-  function wireEnterToUnlock() {
-    const urlEl = document.getElementById("loginBaseUrl");
-    const passEl = document.getElementById("loginToken");
-    const btn = document.getElementById("unlockBtn");
-
-    const handler = (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        if (btn) btn.click();
-        else login();
-      }
-    };
-
-    if (urlEl)  urlEl.addEventListener("keydown", handler);
-    if (passEl) passEl.addEventListener("keydown", handler);
-  }
-
-  async function login() {
-    const msg = document.getElementById("loginMsg");
-    msg.textContent = "";
-
-    const url = document.getElementById("loginBaseUrl").value.trim().replace(/\/+$/, "");
-    const token = document.getElementById("loginToken").value.trim();
-
-    if (!url || !token) {
-      msg.textContent = "Please enter robot URL and password.";
-      lockUI();
-      return;
-    }
-
-    // Set first
-    ROBOT_BASE_URL = url;
-    AUTH_TOKEN = token;
-
-    // Reflect in UI
-    document.getElementById("baseUrl").value = ROBOT_BASE_URL;
-    document.getElementById("apiHost").textContent = ROBOT_BASE_URL;
-
-    try {
-      const r = await httpGet("/health", { bypassCommsGate: true });
-      if (!r.ok) {
-        msg.textContent = (r.status === 401 || r.status === 403)
-          ? "Incorrect token entered."
-          : `Login failed (HTTP ${r.status})`;
-
-        AUTH_TOKEN = "";
-        ROBOT_BASE_URL = "";
-        clearAuth();
-        lockUI();
-        return;
-      }
-
-      saveAuth();
-      COMMS_ENABLED = true;
-      unlockUI();
-      setStatus("Unlocked ✅", true);
-      await refreshSafetyStatus();
-
-    } catch (e) {
-      msg.textContent = "Login error: " + (e?.message || String(e));
-      lockUI();
-    }
-  }
-
-  function logout() {
-    closeAllTerminals();
-
-    AUTH_TOKEN = "";
-    ROBOT_BASE_URL = "";
-    COMMS_ENABLED = true;
-    clearAuth();
-
-    const t = document.getElementById("loginToken");
-    if (t) t.value = "";
-
-    const cb = document.getElementById("showPw");
-    if (cb) cb.checked = false;
-    if (t) t.type = "password";
-
-    lockUI();
-    setStatus("Logged out.", true);
-  }
-
-  // ----------------------------
-  // Status
-  // ----------------------------
-  function setStatus(text, ok=true, detail="") {
-    const msg = document.getElementById("msg");
-    const detailEl = document.getElementById("detail");
-    msg.textContent = text;
-    msg.style.color = ok ? "#0a7a0a" : "#b00020";
-    detailEl.textContent = detail || "";
-
-    const apiHost = document.getElementById("apiHost");
-    if (apiHost) apiHost.textContent = baseUrl();
-  }
-
-  // ----------------------------
-  // Networking helpers
-  // ----------------------------
-  function isAlwaysAllowed(path) {
-    return path === "/health" || path.startsWith("/safety/");
-  }
-
-  function commsAllowed(path, opts = {}) {
-    if (opts.bypassCommsGate) return true;
-    if (isAlwaysAllowed(path)) return true;
-    return COMMS_ENABLED;
-  }
-
-  async function httpGet(path, opts = {}) {
-    const url = baseUrl() + path;
-
-    if (!commsAllowed(path, opts)) {
-      return { ok:false, status: 0, text: "Comms disabled: press RESUME to re-enable", url };
-    }
-
-    const r = await fetch(url, { headers: authHeaders() });
-
-    if (r.status === 401 || r.status === 403) {
-      AUTH_TOKEN = "";
-      ROBOT_BASE_URL = "";
-      clearAuth();
-      lockUI();
-      const msg = document.getElementById("loginMsg");
-      if (msg) msg.textContent = "Invalid token. Please log in again.";
-    }
-
-    const t = await r.text();
-    return { ok: r.ok, status: r.status, text: t, url };
-  }
-
-  async function httpPost(path, json=null, opts = {}) {
-    const url = baseUrl() + path;
-
-    if (!commsAllowed(path, opts)) {
-      return { ok:false, status: 0, text: "Comms disabled: press RESUME to re-enable", url };
-    }
-
-    const headers = { ...authHeaders() };
-    if (json !== null) headers["Content-Type"] = "application/json";
-
-    const r = await fetch(url, {
-      method:"POST",
-      headers,
-      body: (json !== null) ? JSON.stringify(json) : null
-    });
-
-    if (r.status === 401 || r.status === 403) {
-      AUTH_TOKEN = "";
-      ROBOT_BASE_URL = "";
-      clearAuth();
-      lockUI();
-      const msg = document.getElementById("loginMsg");
-      if (msg) msg.textContent = "Invalid token. Please log in again.";
-    }
-
-    const t = await r.text();
-    return { ok: r.ok, status: r.status, text: t, url };
-  }
-
-  async function checkHealth() {
-    if (!ensureLoggedIn()) return;
-    setStatus("Checking /health...");
-    try {
-      const r = await httpGet("/health", { bypassCommsGate: true });
-      setStatus(
-        r.ok ? "Health OK ✅" : `Health failed (HTTP ${r.status})`,
-        r.ok,
-        `URL: ${r.url}\n${r.text}`
-      );
-    } catch (e) {
-      setStatus("Health network error", false, `API base was: ${baseUrl()}\n${String(e)}\n\nTip: API must be http(s)://<go2-ip>:8000`);
-    }
-  }
-
-  // ----------------------------
-  // Safety STOP/RESUME toggle
-  // ----------------------------
-  let stopLatched = false;  // UI copy of backend state
+  let stopLatched = false;
   let safetyBusy = false;
 
   function setSafetyButton(latched) {
+    stopLatched = !!latched;
     const btn = document.getElementById("safetyToggleBtn");
     if (!btn) return;
-
-    stopLatched = !!latched;
-
-    if (stopLatched) {
-      btn.textContent = "RESUME";
-      btn.classList.remove("danger");
-    } else {
-      btn.textContent = "STOP";
-      btn.classList.add("danger");
-    }
-
+    btn.textContent = stopLatched ? "RESUME" : "STOP";
+    btn.classList.toggle("danger", !stopLatched);
     btn.disabled = safetyBusy;
   }
 
   async function refreshSafetyStatus() {
-    if (!ensureLoggedIn()) return;
-
-    const r = await httpGet("/safety/status", { bypassCommsGate: true });
+    if (!Go2Shared.ensureLoggedIn()) return;
+    const r = await Go2Shared.httpGet("/safety/status", { bypassCommsGate: true });
     if (r.ok) {
       try {
         const data = JSON.parse(r.text);
         setSafetyButton(!!data.stop_latched);
-      } catch (_) {}
+        Go2Shared.state.COMMS_ENABLED = !stopLatched;
+      } catch {}
     }
     return r;
   }
 
   async function toggleSafety() {
-    if (!ensureLoggedIn()) return;
-    if (safetyBusy) return;
-
+    if (!Go2Shared.ensureLoggedIn() || safetyBusy) return;
     safetyBusy = true;
     setSafetyButton(stopLatched);
 
     try {
-      // STOP
       if (!stopLatched) {
-        const r = await httpPost("/safety/stop", null, { bypassCommsGate: true });
+        const r = await Go2Shared.httpPost("/safety/stop", null, { bypassCommsGate: true });
+        if (!r.ok) { Go2Shared.setStatus(`STOP failed (HTTP ${r.status})`, false, `URL: ${r.url}\n${r.text}`); return; }
 
-        if (!r.ok) {
-          setStatus(`STOP failed (HTTP ${r.status})`, false, `URL: ${r.url}\n${r.text}`);
-          await refreshSafetyStatus();
-          return;
-        }
-
-        // Close terminals for safety
-        closeAllTerminals();
-
-        // Disable comms only after STOP success
-        COMMS_ENABLED = false;
-
-        setStatus("STOP latched 🔒", true, `URL: ${r.url}\n${r.text}\n\nTerminals closed. Comms disabled until RESUME.`);
+        Go2Shared.state.COMMS_ENABLED = false;
+        closeAllTerminals(); // safety: kill terminals
+        Go2Shared.setStatus("STOP latched 🔒", true, `URL: ${r.url}\n${r.text}\n\nTerminals closed. Comms disabled until RESUME.`);
         await refreshSafetyStatus();
         return;
       }
 
-      // RESUME
-      const r2 = await httpPost("/safety/resume", null, { bypassCommsGate: true });
+      const r2 = await Go2Shared.httpPost("/safety/resume", null, { bypassCommsGate: true });
+      if (!r2.ok) { Go2Shared.setStatus(`RESUME failed (HTTP ${r2.status})`, false, `URL: ${r2.url}\n${r2.text}`); return; }
 
-      if (!r2.ok) {
-        setStatus(`RESUME failed (HTTP ${r2.status})`, false, `URL: ${r2.url}\n${r2.text}`);
-        await refreshSafetyStatus();
-        return;
-      }
-
-      COMMS_ENABLED = true;
-
-      // Reconnect any terminals that are marked open (normally none, since STOP closes them)
-      for (const n of [1,2,3]) {
-        if (terminals[n].open) connectTerminalWs(n);
-      }
-
-      setStatus("RESUME ✅", true, `URL: ${r2.url}\n${r2.text}\n\nComms enabled again.`);
+      Go2Shared.state.COMMS_ENABLED = true;
+      Go2Shared.setStatus("RESUME ✅", true, `URL: ${r2.url}\n${r2.text}\n\nComms enabled again.`);
       await refreshSafetyStatus();
-
     } finally {
       safetyBusy = false;
-      await refreshSafetyStatus();
+      setSafetyButton(stopLatched);
     }
   }
 
   // ----------------------------
-  // Terminal(s) (xterm.js) with fit + autoscroll + resize
+  // Terminal(s) using shared connectTerminalWs
   // ----------------------------
   const terminals = {
     1: { term: null, fit: null, ws: null, open: false, ro: null, follow: true },
     2: { term: null, fit: null, ws: null, open: false, ro: null, follow: true },
     3: { term: null, fit: null, ws: null, open: false, ro: null, follow: true },
   };
-
-  function apiWsBase() {
-    const api = baseUrl();               // e.g. http://192.168.123.18:8000
-    const u = new URL(api);
-    const wsProto = u.protocol === "https:" ? "wss" : "ws";
-    return `${wsProto}://${u.host}`;
-  }
 
   function isNearBottom(t, threshold = 2) {
     return (t.buffer.active.length - (t.buffer.active.viewportY + t.rows)) <= threshold;
@@ -505,7 +216,9 @@
   function sendTermResize(n) {
     const st = terminals[n];
     if (!st.term || !st.ws || st.ws.readyState !== WebSocket.OPEN) return;
-    st.ws.send(JSON.stringify({ resize: { cols: st.term.cols, rows: st.term.rows } }));
+    try {
+      st.ws.send(JSON.stringify({ resize: { cols: st.term.cols, rows: st.term.rows } }));
+    } catch {}
   }
 
   function anyTerminalOpen() {
@@ -514,14 +227,14 @@
 
   function updateTerminalsWrapVisibility() {
     const wrap = document.getElementById("terminalsWrap");
-    wrap.style.display = anyTerminalOpen() ? "grid" : "none";
+    if (wrap) wrap.style.display = anyTerminalOpen() ? "grid" : "none";
   }
 
   function destroyTerminal(n) {
     const st = terminals[n];
 
     // Close ws
-    try { if (st.ws && st.ws.readyState === WebSocket.OPEN) st.ws.close(); } catch (_) {}
+    try { if (st.ws) st.ws.close(); } catch (_) {}
     st.ws = null;
 
     // Resize observer
@@ -533,14 +246,13 @@
     st.term = null;
     st.fit = null;
 
-    // Clear DOM container
+    // Clear DOM
     const container = document.getElementById(`terminal${n}`);
     if (container) container.innerHTML = "";
 
     st.open = false;
     st.follow = true;
 
-    // Hide panel
     const panel = document.getElementById(`terminalPanel${n}`);
     if (panel) panel.style.display = "none";
 
@@ -551,57 +263,6 @@
     destroyTerminal(1);
     destroyTerminal(2);
     destroyTerminal(3);
-  }
-
-  function connectTerminalWs(n) {
-    const st = terminals[n];
-    if (!st.term) return;
-
-    if (!AUTH_TOKEN) {
-      st.term.write("\r\n[Login required]\r\n");
-      return;
-    }
-
-    // If comms disabled, refuse
-    if (!COMMS_ENABLED) {
-      st.term.write("\r\n[STOP latched: terminal disabled]\r\n");
-      return;
-    }
-
-    // If already connected, do nothing
-    if (st.ws && (st.ws.readyState === WebSocket.OPEN || st.ws.readyState === WebSocket.CONNECTING)) {
-      return;
-    }
-
-    st.ws = new WebSocket(`${apiWsBase()}/ws/terminal?token=${encodeURIComponent(AUTH_TOKEN)}`);
-
-    st.ws.onopen = () => {
-      st.term.write(`\r\n[Connected to Go2 terminal ${n}]\r\n`, () => {
-        const wasFollowing = st.follow;
-        if (st.fit) st.fit.fit();
-        sendTermResize(n);
-        if (wasFollowing) st.term.scrollToBottom();
-        updateFollowFlag(n);
-        st.term.focus();
-      });
-    };
-
-    st.ws.onmessage = (e) => {
-      const shouldFollow = st.follow;
-      st.term.write(e.data, () => {
-        if (shouldFollow) st.term.scrollToBottom();
-        updateFollowFlag(n);
-      });
-    };
-
-    st.ws.onclose = () => {
-      st.term && st.term.write("\r\n[Terminal disconnected]\r\n");
-      st.ws = null; // allow reconnect
-    };
-
-    st.ws.onerror = () => {
-      st.term && st.term.write("\r\n[Terminal error]\r\n");
-    };
   }
 
   function ensureTerminalStarted(n) {
@@ -626,7 +287,7 @@
     st.term.open(container);
     st.fit.fit();
 
-    // Make clicks focus the terminal (fixes “can’t type”)
+    // Focus on click (fix “can't type”)
     container.addEventListener("pointerdown", () => st.term && st.term.focus());
 
     // Scroll tracking
@@ -638,7 +299,7 @@
       if (st.ws && st.ws.readyState === WebSocket.OPEN) st.ws.send(data);
     });
 
-    // Resize observer per terminal
+    // Resize observer
     st.ro = new ResizeObserver(() => {
       window.clearTimeout(window[`__termResizeT${n}`]);
       window[`__termResizeT${n}`] = window.setTimeout(() => {
@@ -652,27 +313,33 @@
     });
     st.ro.observe(container);
 
-    // Connect WS initially
-    connectTerminalWs(n);
+    // Connect via shared helper
+    Go2Shared.connectTerminalWs(st, n, () => {
+      const wasFollowing = st.follow;
+      if (st.fit) st.fit.fit();
+      sendTermResize(n);
+      if (wasFollowing) st.term.scrollToBottom();
+      updateFollowFlag(n);
+    });
   }
 
   function openTerminal(n) {
-    if (!ensureLoggedIn()) return;
+    if (!Go2Shared.ensureLoggedIn()) return;
 
-    if (!COMMS_ENABLED) {
-      setStatus("STOP latched 🔒", false, "Terminal is disabled while STOP is latched. Press RESUME.");
+    if (!Go2Shared.state.COMMS_ENABLED) {
+      Go2Shared.setStatus("STOP latched 🔒", false, "Terminal is disabled while STOP is latched. Press RESUME.");
       return;
     }
 
     const panel = document.getElementById(`terminalPanel${n}`);
-    panel.style.display = "block";
+    if (panel) panel.style.display = "block";
     terminals[n].open = true;
 
     updateTerminalsWrapVisibility();
 
     ensureTerminalStarted(n);
-    connectTerminalWs(n);
 
+    // Nudge layout/fit
     setTimeout(() => {
       const st = terminals[n];
       if (!st.term) return;
@@ -687,59 +354,9 @@
 
   function toggleTerminalN(n) {
     const st = terminals[n];
-    if (st.open) {
-      destroyTerminal(n);
-      return;
-    }
+    if (st.open) { destroyTerminal(n); return; }
     openTerminal(n);
   }
-
-  // ----------------------------
-  // Boot: restore saved creds + compute default API from UI host
-  // ----------------------------
-  function computeDefaultApi() {
-    // If UI is opened like http(s)://<host>:8081/... then default API is same host on :8000
-    const host = window.location.hostname; // no port
-    const apiPort = 8000;
-    const proto = window.location.protocol; // http: or https:
-    return `${proto}//${host}:${apiPort}`;
-  }
-
-  window.addEventListener("DOMContentLoaded", async () => {
-    wireEnterToUnlock();
-
-    document.getElementById("uiHost").textContent = location.origin;
-
-    const defaultApi = computeDefaultApi();
-    document.getElementById("loginBaseUrl").value = defaultApi;
-    document.getElementById("baseUrl").value = defaultApi;
-    document.getElementById("apiHost").textContent = defaultApi;
-
-    // Load saved creds
-    const { u, t } = loadAuth();
-    if (u && t) {
-      document.getElementById("loginBaseUrl").value = u;
-      document.getElementById("loginToken").value = t;
-
-      ROBOT_BASE_URL = u;
-      AUTH_TOKEN = t;
-
-      const r = await httpGet("/health", { bypassCommsGate: true }).catch(() => null);
-      if (r && r.ok) {
-        unlockUI();
-        setStatus("Unlocked ✅ (remembered)", true);
-        await refreshSafetyStatus();
-        return;
-      }
-
-      // creds stale
-      AUTH_TOKEN = "";
-      ROBOT_BASE_URL = "";
-      clearAuth();
-    }
-
-    lockUI();
-  });
-  </script>
+</script>
 </body>
 </html>

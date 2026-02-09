@@ -26,6 +26,26 @@
 * { box-sizing: border-box; }
 body { font-family: var(--font); margin: 0; padding: var(--pad); background: var(--bg); }
 h1 { margin: 0 0 10px; font-size: 20px; }
+.pageNav{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin: 10px 0 12px;
+}
+.navBtn{
+  display:inline-block;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid #ddd;
+  background:#f7f7f7;
+  text-decoration:none;
+  color:inherit;
+  font-size:14px;
+}
+.navBtn.active{
+  border-color:#7aa7ff;
+  background:#eaf2ff;
+}
 input {
   padding: 10px;
   border-radius: var(--radius-sm);
@@ -178,4 +198,42 @@ canvas {
 }
 html[data-auth-enabled="0"] .loginOverlay {
   display: none !important;
+}
+.pageNav{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin: 10px 0 12px;
+}
+.navBtn{
+  display:inline-block;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid #ddd;
+  background:#f7f7f7;
+  text-decoration:none;
+  color:inherit;
+  font-size:14px;
+}
+.navBtn.active{
+  border-color:#7aa7ff;
+  background:#eaf2ff;
+}
+.modalOverlay{
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.45);
+  padding: 14px;
+  z-index: 9999;
+}
+.modalCard{
+  width: min(520px, 100%);
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.18);
 }

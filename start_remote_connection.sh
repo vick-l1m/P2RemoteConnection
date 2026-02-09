@@ -142,6 +142,29 @@ else
 fi
 
 # ----------------------------
+# 0) Start L1 -> 2D map generator (flatten_l1_data)
+# ----------------------------
+echo "[run_all] Starting flatten_l1_data (L1 -> /map2d)..."
+ros2 run p2_remote_connection flatten_l1_data \
+  --ros-args \
+  -p cloud_topic:=/utlidar/cloud_base \
+  -p map2d_topic:=/map2d \
+  -p min_height_rel:=-5.0 \
+  -p max_height_rel:=5.0 \
+  -p tick_rate_hz:=5.0 \
+  -p update_radius_m:=20.0 \
+  -p decay_per_tick:=100 \
+  -p max_occ:=100 \
+  -p resolution:=0.1 \
+  > /tmp/flatten_l1_data.log 2>&1 &
+
+FLATTEN_PID=$!
+pids+=("$FLATTEN_PID")
+
+sleep 0.3
+ok_or_die "flatten_l1_data" "$FLATTEN_PID"
+
+# ----------------------------
 # 1) Start FastAPI backend
 # ----------------------------
 echo "[run_all] Starting FastAPI (uvicorn) on :$API_PORT ..."
@@ -225,15 +248,15 @@ fi
 HOST_IP="${HOST_IP:-127.0.0.1}"
 
 if [ "$MODE" = "terminal" ]; then
-  echo "[run_all] UI:  http://<this-machine-ip>:$UI_PORT/app/go2_terminal_only.html"
+  echo "[run_all] UI:  http://$HOST_IP:$UI_PORT/app/go2_terminal_only.html"
 elif [ "$MODE" = "movement" ]; then
-  echo "[run_all] UI:  http://<this-machine-ip>:$UI_PORT/app/go2_movement_controller.html"
+  echo "[run_all] UI:  http://$HOST_IP:$UI_PORT/app/go2_movement_controller.html"
 else
-  echo "[run_all] UI:  http://<this-machine-ip>:$UI_PORT/app/go2_joystick.html"
+  echo "[run_all] UI:  http://$HOST_IP:$UI_PORT/app/go2_joystick.html"
 fi
 
 
-echo "[run_all] API: http://<this-machine-ip>:$API_PORT"
+echo "[run_all] API: http://$HOST_IP:$API_PORT"
 echo "[run_all] Press Ctrl+C to stop everything."
 echo ""
 

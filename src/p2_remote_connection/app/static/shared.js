@@ -37,9 +37,16 @@
 
   Go2Shared.fetchConfig = async function fetchConfig() {
     try {
-      const r = await fetch(Go2Shared.baseUrl() + "/config");
+      const r = await fetch(Go2Shared.baseUrl() + "/config", { cache: "no-store" });
       if (!r.ok) return null;
-      return await r.json();
+  
+      const cfg = await r.json();
+  
+      if (cfg && typeof cfg.auth_enabled === "boolean") {
+        Go2Shared.cfg.authEnabled = cfg.auth_enabled;
+      }
+  
+      return cfg;
     } catch {
       return null;
     }
@@ -365,97 +372,69 @@
   // ----------------------------
   // Auto-init (load remembered auth, set default URL, lock/unlock)
   // ----------------------------
-Go2Shared.fetchConfig = async function fetchConfig() {
-  try {
-    const r = await fetch(Go2Shared.baseUrl() + "/config");
-    if (!r.ok) return null;
-    return await r.json();
-  } catch {
-    return null;
-  }
-};
+  Go2Shared.init = async function init({ defaultApi = "", showAuthButtons = false } = {}) {
+    if (!defaultApi) defaultApi = Go2Shared.computeDefaultApi();
+  
+    Go2Shared.cfg.defaultApi = defaultApi;
+    Go2Shared.cfg.showAuthButtons = !!showAuthButtons;
+  
+    setText("uiHost", location.origin);
+    
+    Go2Shared.injectNavBar();
+    Go2Shared.highlightActivePage();
+    
+    // Fill inputs (no hardcoded value in HTML needed)
+    const loginUrl = $("loginBaseUrl");
+    const baseInput = $("baseUrl");
+    if (loginUrl) loginUrl.value = defaultApi;
+    if (baseInput) baseInput.value = defaultApi;
+    setText("apiHost", defaultApi);
+  
+    Go2Shared.renderAuthButtons();
+    Go2Shared.wireEnterToUnlock();
+  
+    // Make sure baseUrl() works for /config fetch
+    Go2Shared.state.ROBOT_BASE_URL = defaultApi;
+  
+    const cfg = await Go2Shared.fetchConfig();
+    if (cfg && typeof cfg.auth_enabled === "boolean") {
+      Go2Shared.cfg.authEnabled = cfg.auth_enabled;
+    }
+  
+    // ✅ Set dataset for CSS rules
+    document.documentElement.dataset.authEnabled = Go2Shared.cfg.authEnabled ? "1" : "0";
 
-Go2Shared.httpGet = async function httpGet(path, opts = {}) {
-  const url = Go2Shared.baseUrl() + path;
-
-  if (!Go2Shared.commsAllowed(path, opts)) {
-    return { ok: false, status: 0, text: "Comms disabled", url };
-  }
-
-  const r = await fetch(url, { headers: Go2Shared.authHeaders() });
-  const t = await r.text();
-
-  // Only force relogin if auth is enabled
-  if (Go2Shared.cfg.authEnabled && (r.status === 401 || r.status === 403)) {
-    Go2Shared.state.AUTH_TOKEN = "";
-    Go2Shared.clearAuth();
-    Go2Shared.lockUI();
-    const msg = $("loginMsg");
-    if (msg) msg.textContent = "Invalid token. Please log in again.";
-  }
-
-  return { ok: r.ok, status: r.status, text: t, url };
-};
-
-Go2Shared.init = async function init({ defaultApi = "", showAuthButtons = false } = {}) {
-  if (!defaultApi) defaultApi = Go2Shared.computeDefaultApi();
-
-  Go2Shared.cfg.defaultApi = defaultApi;
-  Go2Shared.cfg.showAuthButtons = !!showAuthButtons;
-
-  setText("uiHost", location.origin);
-
-  // Fill inputs (no hardcoded value in HTML needed)
-  const loginUrl = $("loginBaseUrl");
-  const baseInput = $("baseUrl");
-  if (loginUrl) loginUrl.value = defaultApi;
-  if (baseInput) baseInput.value = defaultApi;
-  setText("apiHost", defaultApi);
-
-  Go2Shared.renderAuthButtons();
-  Go2Shared.wireEnterToUnlock();
-
-  // Make sure baseUrl() works for /config fetch
-  Go2Shared.state.ROBOT_BASE_URL = defaultApi;
-
-  const cfg = await Go2Shared.fetchConfig();
-  if (cfg && typeof cfg.auth_enabled === "boolean") {
-    Go2Shared.cfg.authEnabled = cfg.auth_enabled;
-  }
-
-  // ✅ Set dataset for CSS rules (Option B)
-  document.documentElement.dataset.authEnabled = Go2Shared.cfg.authEnabled ? "1" : "0";
-
-  // ✅ If auth disabled, never show overlay
-  if (!Go2Shared.cfg.authEnabled) {
-    Go2Shared.state.AUTH_TOKEN = "";
-    Go2Shared.unlockUI();
-    Go2Shared.setStatus("Auth disabled 🔓", true);
-    return;
-  }
-
-  // Auth enabled: try remembered login
-  const { u, t } = Go2Shared.loadAuth();
-  if (u && t) {
-    Go2Shared.state.ROBOT_BASE_URL = u;
-    Go2Shared.state.AUTH_TOKEN = t;
-    if (loginUrl) loginUrl.value = u;
-    const loginToken = $("loginToken");
-    if (loginToken) loginToken.value = t;
-    if (baseInput) baseInput.value = u;
-    setText("apiHost", u);
-
-    const r = await Go2Shared.httpGet("/health").catch(() => ({ ok: false }));
-    if (r.ok) {
-      Go2Shared.unlockUI();
-      Go2Shared.setStatus("Unlocked ✅ (remembered)", true);
+    // ✅ If auth disabled, never show overlay
+    if (!Go2Shared.cfg.authEnabled) {
+      Go2Shared.state.AUTH_TOKEN = "";
+      Go2Shared.unlockUI();                 // hide overlay + unlock
+      Go2Shared.injectNavBar();             // still show nav
+      Go2Shared.highlightActivePage();
       return;
     }
-  }
+  
+    // Auth enabled: try remembered login
+    const { u, t } = Go2Shared.loadAuth();
+    if (u && t) {
+      Go2Shared.state.ROBOT_BASE_URL = u;
+      Go2Shared.state.AUTH_TOKEN = t;
+      if (loginUrl) loginUrl.value = u;
+      const loginToken = $("loginToken");
+      if (loginToken) loginToken.value = t;
+      if (baseInput) baseInput.value = u;
+      setText("apiHost", u);
+  
+      const r = await Go2Shared.httpGet("/health").catch(() => ({ ok: false }));
+      if (r.ok) {
+        Go2Shared.unlockUI();
+        Go2Shared.setStatus("Unlocked ✅ (remembered)", true);
+        return;
+      }
+    }
 
-  // No remembered login or it failed => lock
-  Go2Shared.lockUI();
-};
+    // No remembered login or it failed => lock
+    Go2Shared.lockUI();
+  };
 
   // ----------------------------
   // Terminal WS helpers (xterm page can build on this)
@@ -500,6 +479,43 @@ Go2Shared.init = async function init({ defaultApi = "", showAuthButtons = false 
     };
   };
 
+  // ----------------------------
+  // Navigation bar + active page highlight
+  // ----------------------------
+  Go2Shared.highlightActivePage = function highlightActivePage() {
+    const path = location.pathname.split("/").pop() || "";
+    document.querySelectorAll(".pageNav .navBtn").forEach(a => {
+      const href = (a.getAttribute("href") || "").split("/").pop();
+      a.classList.toggle("active", href === path);
+    });
+  };
+
+  Go2Shared.injectNavBar = function injectNavBar() {
+    const card = document.querySelector("#appRoot .card");
+    if (!card) return;
+  
+    if (card.querySelector(".pageNav")) return;
+  
+    const nav = document.createElement("div");
+    nav.className = "pageNav";
+    nav.innerHTML = `
+      <a class="navBtn" href="/app/go2_joystick.html">Joysticks</a>
+      <a class="navBtn" href="/app/go2_movement_controller.html">Movement</a>
+      <a class="navBtn" href="/app/go2_map_viewer.html">Map</a>
+      <a class="navBtn" href="/app/go2_terminal_only.html">Terminal</a>
+      <a class="navBtn" href="/app/go2_other.html">Other</a>
+    `;
+  
+    const h1 = card.querySelector("h1");
+    if (h1 && h1.nextSibling) card.insertBefore(nav, h1.nextSibling);
+    else card.prepend(nav);
+  
+    Go2Shared.highlightActivePage();
+  };
+
   // Expose
   window.Go2Shared = Go2Shared;
 })();
+
+
+

@@ -19,6 +19,11 @@ find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(map_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2_sensor_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 
 # Unitree robot-specific dependencies (only needed for the REAL robot bridge)
 find_package(unitree_api REQUIRED)
@@ -100,6 +105,26 @@ ament_target_dependencies(advanced_gamepad_controller_web
 install(TARGETS advanced_gamepad_controller_web
   DESTINATION lib/${PROJECT_NAME}
 )
+
+# Executable: flatten_l1_data 
+add_executable(flatten_l1_data src/flatten_L1_data.cpp)
+
+ament_target_dependencies(flatten_l1_data
+  rclcpp
+  sensor_msgs
+  nav_msgs
+  map_msgs
+  tf2
+  tf2_ros
+  tf2_sensor_msgs
+  geometry_msgs
+)
+
+install(TARGETS
+  flatten_l1_data
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 
 # Install rules
 # - install headers so other packages can include them
