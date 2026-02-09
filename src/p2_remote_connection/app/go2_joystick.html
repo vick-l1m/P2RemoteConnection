@@ -1,106 +1,57 @@
-<!-- go2_joystick.html -->
-
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Go2 Teleop</title>
-  <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 14px; }
-    .card { max-width: 760px; margin: 0 auto; border: 1px solid #ddd; border-radius: 16px; padding: 14px; }
-    h1 { margin: 0 0 10px; font-size: 20px; }
-    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-    input { padding: 10px; border-radius: 12px; border: 1px solid #ccc; flex: 1; min-width: 220px; font-size: 16px; }
-    button {
-      padding: 12px 12px; border-radius: 12px; border: 1px solid #ccc; background: #f7f7f7;
-      font-size: 16px; cursor: pointer; min-width: 120px;
-    }
-    .danger { background: #fff1f1; border-color: #ffb3b3; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
-    .joyBox { border: 1px solid #eee; border-radius: 16px; padding: 10px; background: #fafafa; }
-    .joyTitle { font-size: 14px; color: #333; margin: 0 0 8px; }
-    canvas { width: 100%; height: 280px; border-radius: 14px; background: #fff; border: 1px solid #eee; touch-action: none; }
-    .status { margin-top: 10px; padding: 10px; border-radius: 12px; background: #fafafa; border: 1px solid #eee; }
-    .small { font-size: 13px; color: #555; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; white-space: pre-wrap; }
-    .hint { margin-top: 6px; }
+  <title>Go2 Joysticks</title>
 
-    .termPanel { margin-top: 12px; border: 1px solid #eee; border-radius: 16px; background: #0f0f0f; overflow: hidden; }
-    .termHeader { display:flex; justify-content: space-between; align-items:center; padding: 10px 12px; background:#171717; border-bottom:1px solid #2a2a2a; }
-    .termTitle { color:#fff; font-size:14px; font-weight:600; }
-    .termHint { color:#bbb; }
-    .termBox {
-      width: 100%;
-      height: 320px;
-      overflow: auto;       /* allow wheel/touch events naturally */
-      touch-action: pan-y;  /* enable vertical scrolling on touch devices */
-    }
-      /* Multi-terminal responsive layout (no squashing) */
-    .termGrid {
-      margin-top: 12px;
-      display: grid;
-      gap: 12px;
+  <link rel="stylesheet" href="./shared.css" />
 
-      /* each terminal is at least 520px; otherwise it wraps to fewer columns */
-      grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
-    }
-    .termPanel {
-      min-width: 520px; /* hard floor so it won't shrink smaller */
-    }
-
-
-
-
-  </style>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css" />
   <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+
+  <script src="./shared.js"></script>
 </head>
 
 <body>
-
-  <!-- LOGIN OVERLAY (must be OUTSIDE appRoot so it can receive clicks) -->
-  <div id="loginOverlay" style="
-    position:fixed; inset:0; background:rgba(0,0,0,0.55);
-    display:flex; align-items:center; justify-content:center; z-index:9999;
-    pointer-events:auto;">
-    <div style="background:white; padding:16px; border-radius:16px; width:min(420px, 92vw);">
-      <h2 style="margin:0 0 10px; font-size:18px;">Connect to Go2</h2>
-      <div style="display:flex; flex-direction:column; gap:10px;">
+  <!-- LOGIN OVERLAY -->
+  <div id="loginOverlay" class="loginOverlay">
+    <div class="loginCard">
+      <h2>Connect to Go2</h2>
+      <div class="loginForm">
         <input id="loginBaseUrl" placeholder="http://robot-ip:8000 or https://robot.domain"
-               style="padding:10px; border-radius:12px; border:1px solid #ccc; font-size:16px;"
                value="https://p2dingo-control-backend.p2agentx.com" />
-        <input id="loginToken" placeholder="Password" type="password"
-               style="padding:10px; border-radius:12px; border:1px solid #ccc; font-size:16px;" />
+        <input id="loginToken" placeholder="Password" type="password" />
         <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#333;">
-          <input id="showPw" type="checkbox" onclick="togglePasswordVisibility()" />
+          <input id="showPw" type="checkbox" onclick="Go2Shared.togglePasswordVisibility()" />
           Show password
         </label>
-        <button id="unlockBtn" onclick="login()" style="padding:12px; border-radius:12px; border:1px solid #ccc; background:#f7f7f7; font-size:16px;">
-          Unlock
-        </button>
-        <div id="loginMsg" style="font-size:13px; color:#b00020;"></div>
-        <div style="font-size:12px; color:#555;">Tip: This password is unique per robot.</div>
+        <button id="unlockBtn" onclick="Go2Shared.login()">Unlock</button>
+        <div id="loginMsg" class="loginMsg"></div>
+        <div class="loginTip">Tip: This password is unique per robot.</div>
       </div>
     </div>
   </div>
 
-  <!-- MAIN APP (locked/blurred until login) -->
-  <div id="appRoot" style="filter: blur(6px); pointer-events:none; user-select:none;">
-    <div class="card">
+  <!-- MAIN APP -->
+  <div id="appRoot" class="appLocked">
+    <div class="card" style="max-width: 760px;">
       <h1>Unitree Go2 – Phone Teleop</h1>
 
       <div class="row">
         <input id="baseUrl" placeholder="http://<go2-ip>:8000" />
-        <button onclick="checkHealth()">Health</button>
+        <button onclick="Go2Shared.checkHealth()">Health</button>
         <button onclick="postAction('stand')">Stand</button>
         <button onclick="postAction('sit')">Sit</button>
+
         <button id="safetyToggleBtn" class="danger" onclick="toggleSafety()">STOP</button>
+
         <button id="termBtn1" onclick="toggleTerminalN(1)">Terminal 1</button>
         <button id="termBtn2" onclick="toggleTerminalN(2)">Terminal 2</button>
         <button id="termBtn3" onclick="toggleTerminalN(3)">Terminal 3</button>
-        <button onclick="logout()">Logout</button>
+
+        <button onclick="Go2Shared.logout()">Logout</button>
       </div>
 
       <div class="small hint">
@@ -127,7 +78,7 @@
           </div>
           <div id="terminal1" class="termBox"></div>
         </div>
-      
+
         <div id="terminalPanel2" class="termPanel" style="display:none;">
           <div class="termHeader">
             <div class="termTitle">Remote Terminal 2</div>
@@ -135,7 +86,7 @@
           </div>
           <div id="terminal2" class="termBox"></div>
         </div>
-      
+
         <div id="terminalPanel3" class="termPanel" style="display:none;">
           <div class="termHeader">
             <div class="termTitle">Remote Terminal 3</div>
@@ -151,531 +102,112 @@
       </div>
 
       <div class="small" style="margin-top:10px;">
-        Tip: keep a finger on the joysticks; Teleop only sends commands while enabled.
+        Tip: Teleop sends commands only while joystick is non-zero.
       </div>
     </div>
   </div>
-  <script>
+
+<script>
+  // ---- init shared ----
+  window.addEventListener("DOMContentLoaded", () => {
+    Go2Shared.init({ defaultApi: "https://p2dingo-control-backend.p2agentx.com" });
+    setTimeout(refreshSafetyStatus, 200);
+  });
 
   // ----------------------------
-  // Authentication
+  // Actions
   // ----------------------------
-  let COMMS_ENABLED = true;
-
-  let AUTH_TOKEN = "";
-  let ROBOT_BASE_URL = "";
-
-  // keys for localStorage
-  const LS_URL_KEY = "go2_baseUrl";
-  const LS_TOKEN_KEY = "go2_token";
-
-  function baseUrl() {
-  // Prefer the "logged in" URL; otherwise fall back to whatever is in the input
-  return (ROBOT_BASE_URL || document.getElementById("baseUrl").value || "")
-    .trim()
-    .replace(/\/+$/, "");
-  }
-
-  function authHeaders() {
-    return AUTH_TOKEN ? { "Authorization": `Bearer ${AUTH_TOKEN}` } : {};
-  }
-
-  function lockUI() {
-    // Show overlay + lock
-    document.getElementById("loginOverlay").style.display = "flex";
-    const root = document.getElementById("appRoot");
-    root.style.filter = "blur(6px)";
-    root.style.pointerEvents = "none";
-    root.style.userSelect = "none";
-  }
-
-  function unlockUI() {
-    document.getElementById("loginOverlay").style.display = "none";
-    const root = document.getElementById("appRoot");
-    root.style.filter = "none";
-    root.style.pointerEvents = "auto";
-    root.style.userSelect = "auto";
-  }
-
-  function saveAuth() {
-    localStorage.setItem(LS_URL_KEY, ROBOT_BASE_URL);
-    localStorage.setItem(LS_TOKEN_KEY, AUTH_TOKEN);
-  }
-
-  function loadAuth() {
-    const u = localStorage.getItem(LS_URL_KEY) || "";
-    const t = localStorage.getItem(LS_TOKEN_KEY) || "";
-    return { u, t };
-  }
-
-  function clearAuth() {
-    localStorage.removeItem(LS_URL_KEY);
-    localStorage.removeItem(LS_TOKEN_KEY);
-  }
-
-  function togglePasswordVisibility() {
-    const pw = document.getElementById("loginToken");
-    const cb = document.getElementById("showPw");
-    if (!pw || !cb) return;
-    pw.type = cb.checked ? "text" : "password";
-  }
-
-  function ensureLoggedIn() {
-    if (!ROBOT_BASE_URL || !AUTH_TOKEN) {
-      const msg = document.getElementById("loginMsg");
-      if (msg) msg.textContent = "Please log in.";
-      lockUI();
-      return false;
-    }
-    return true;
-  }
-
-  async function login() {
-    const msg = document.getElementById("loginMsg");
-    msg.textContent = "";
-
-    const url = document.getElementById("loginBaseUrl").value.trim().replace(/\/+$/, "");
-    const token = document.getElementById("loginToken").value.trim();
-
-    if (!url || !token) {
-      msg.textContent = "Please enter robot URL and password.";
-      lockUI();
-      return;
-    }
-
-    // ✅ SET FIRST
-    ROBOT_BASE_URL = url;
-    AUTH_TOKEN = token;
-
-    // ✅ THEN reflect in UI
-    document.getElementById("baseUrl").value = ROBOT_BASE_URL;
-    document.getElementById("apiHost").textContent = ROBOT_BASE_URL;
-
-    try {
-      console.log("LOGIN baseUrl() =", baseUrl());
-
-      const r = await httpGet("/health");
-
-      if (!r.ok) {
-        if (r.status === 401 || r.status === 403) {
-          msg.textContent = "Incorrect token entered.";
-        } else {
-          msg.textContent = `Login failed (HTTP ${r.status})`;
-        }
-        AUTH_TOKEN = "";
-        clearAuth();
-        lockUI();
-        return;
-      }
-
-      // ✅ Success
-      saveAuth();
-      unlockUI();
-      setStatus("Unlocked ✅", true);
-      await refreshSafetyStatus();
-
-    } catch (e) {
-      console.error("LOGIN ERROR:", e);
-      msg.textContent = "Login error: " + (e?.message || String(e));
-      // DON'T clear token here (this might be a JS bug, not network)
-      lockUI();
-    }
-  }
-
-  function logout() {
-    AUTH_TOKEN = "";
-    ROBOT_BASE_URL = "";
-    clearAuth();
-
-    // Clear password box
-    const t = document.getElementById("loginToken");
-    if (t) t.value = "";
-
-    const cb = document.getElementById("showPw");
-    if (cb) cb.checked = false;
-    if (t) t.type = "password";
-
-    lockUI();
-    setStatus("Logged out.", true);
-  }
-
-  function wireEnterToUnlock() {
-    const urlEl = document.getElementById("loginBaseUrl");
-    const passEl = document.getElementById("loginToken");
-    const btn = document.getElementById("unlockBtn");
-
-    const handler = (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        if (btn) btn.click();
-        else login();
-      }
-    };
-
-    if (urlEl)  urlEl.addEventListener("keydown", handler);
-    if (passEl) passEl.addEventListener("keydown", handler);
-  }
-  window.addEventListener("DOMContentLoaded", wireEnterToUnlock);
-
-
-
-  function computeDefaultApi() {
-    // If you open the UI like http://192.168.x.x:8081/... => hostname is 192.168.x.x
-    // If you open via domain => hostname is that domain
-    const host = window.location.hostname;       // no port
-    const apiPort = 8000;
-
-    // Use same scheme as UI (http/https). If you terminate TLS elsewhere, adjust as needed.
-    const proto = window.location.protocol;      // "http:" or "https:"
-    return `${proto}//${host}:${apiPort}`;
-  }
-
-  window.addEventListener("DOMContentLoaded", async () => {
-    // // Use HTTPS domain backend URL
-    const defaultApi = "https://p2dingo-control-backend.p2agentx.com";
-    // Use EC2 backend URL
-    // const defaultApi = computeDefaultApi();
-    document.getElementById("loginBaseUrl").value = defaultApi;
-    document.getElementById("baseUrl").value = defaultApi;
-    document.getElementById("apiHost").textContent = defaultApi;
-
-
-    const base = document.getElementById("baseUrl");
-    if (!base.value || base.value.trim() === "" || base.value.includes("localhost")) base.value = defaultApi;
-
-    document.getElementById("uiHost").textContent = location.origin;
-    document.getElementById("apiHost").textContent = base.value;
-
-    // Load saved creds
-    const { u, t } = loadAuth();
-    if (u && t) {
-      document.getElementById("loginBaseUrl").value = u;
-      document.getElementById("loginToken").value = t;
-
-      // Try to auto-login
-      ROBOT_BASE_URL = u;
-      AUTH_TOKEN = t;
-      const r = await httpGet("/health").catch(() => null);
-      if (r && r.ok) {
-        const baseInput = document.getElementById("baseUrl");
-        if (baseInput) baseInput.value = ROBOT_BASE_URL;
-        unlockUI();
-        setStatus("Unlocked ✅ (remembered)", true);
-        await refreshSafetyStatus();
-        return;
-      }
-
-      // If token is wrong now, clear it
-      AUTH_TOKEN = "";
-      ROBOT_BASE_URL = "";
-      clearAuth();
-    }
-
-    // Default state: locked
-  lockUI();
-});
-
-  // ----------------------------
-  // Networking helpers
-  // ----------------------------
-  function setStatus(text, ok=true, detail="") {
-    const msg = document.getElementById("msg");
-    const detailEl = document.getElementById("detail");
-    msg.textContent = text;
-    msg.style.color = ok ? "#0a7a0a" : "#b00020";
-    detailEl.textContent = detail || "";
-    // update hint
-    const apiHost = document.getElementById("apiHost");
-    if (apiHost) apiHost.textContent = baseUrl();
-  }
-
-  function isAlwaysAllowed(path) {
-    return path === "/health" || path.startsWith("/safety/");
-  }
-
-  function commsAllowed(path, opts = {}) {
-    // Explicit bypass for critical calls (e.g. safety)
-    if (opts.bypassCommsGate) return true;
-
-    // Always allow health + safety endpoints regardless of COMMS_ENABLED
-    if (isAlwaysAllowed(path)) return true;
-
-    return COMMS_ENABLED;
-  }
-
-  async function httpGet(path, opts = {}) {
-    const url = baseUrl() + path;
-
-    if (!commsAllowed(path, opts)) {
-      return {
-        ok: false,
-        status: 0,
-        text: "Comms disabled: press RESUME to re-enable",
-        url
-      };
-    }
-
-    console.log("GET", url);
-
-    const r = await fetch(url, { headers: authHeaders() });
-
-    if (r.status === 401 || r.status === 403) {
-      AUTH_TOKEN = "";
-      clearAuth();
-      lockUI();
-      const msg = document.getElementById("loginMsg");
-      if (msg) msg.textContent = "Invalid token. Please log in again.";
-    }
-
-    const t = await r.text();
-    return { ok: r.ok, status: r.status, text: t, url };
-  }
-
-  async function httpPost(path, json = null, opts = {}) {
-    const url = baseUrl() + path;
-
-    if (!commsAllowed(path, opts)) {
-      return {
-        ok: false,
-        status: 0,
-        text: "Comms disabled: press RESUME to re-enable",
-        url
-      };
-    }
-
-    const headers = { ...authHeaders() };
-    if (json !== null) headers["Content-Type"] = "application/json";
-
-    console.log("POST", url);
-
-    const r = await fetch(url, {
-      method: "POST",
-      headers,
-      body: (json !== null) ? JSON.stringify(json) : null
-    });
-
-    if (r.status === 401 || r.status === 403) {
-      AUTH_TOKEN = "";
-      clearAuth();
-      lockUI();
-      const msg = document.getElementById("loginMsg");
-      if (msg) msg.textContent = "Invalid token. Please log in again.";
-    }
-
-    const t = await r.text();
-    return { ok: r.ok, status: r.status, text: t, url };
-  }
-
-  async function checkHealth() {
-    setStatus("Checking /health...");
-    try {
-      const r = await httpGet("/health");
-      setStatus(
-        r.ok ? "Health OK ✅" : `Health failed (HTTP ${r.status})`,
-        r.ok,
-        `URL: ${r.url}\n${r.text}`
-      );
-    } catch (e) {
-      setStatus(
-        "Health network error",
-        false,
-        `API base was: ${baseUrl()}\n` + String(e) +
-        "\n\nTip: API must be http://<go2-ip>:8000 (NOT :8081)."
-      );
-    }
-  }
-
   async function postAction(action) {
-    if (!ensureLoggedIn()) return;
-    setStatus(`Sending ${action}...`);
-    if (!COMMS_ENABLED) {
-      setStatus("STOP latched 🔒", false, "No actions can be taken until RESUME is pressed.");
+    if (!Go2Shared.ensureLoggedIn()) return;
+    if (!Go2Shared.state.COMMS_ENABLED) {
+      Go2Shared.setStatus("STOP latched 🔒", false, "No actions until RESUME.");
       return;
     }
 
-    try {
-      const r = await httpPost(`/actions/${action}`);
-      setStatus(
-        r.ok ? `${action} started ✅` : `${action} failed (HTTP ${r.status})`,
-        r.ok,
-        `URL: ${r.url}\n${r.text}`
-      );
-    } catch (e) {
-      setStatus(
-        `${action} network error`,
-        false,
-        `API base was: ${baseUrl()}\n` + String(e) +
-        "\n\nTip: API must be http://<go2-ip>:8000 (NOT :8081)."
-      );
-    }
+    const r = await Go2Shared.httpPost(`/actions/${action}`);
+    Go2Shared.setStatus(
+      r.ok ? `${action} started ✅` : `${action} failed (HTTP ${r.status})`,
+      r.ok,
+      `URL: ${r.url}\n${r.text}`
+    );
   }
 
   // ----------------------------
-  // Safety STOP/RESUME toggle
+  // Safety STOP/RESUME latch
   // ----------------------------
-  let stopLatched = false;  // UI copy of backend state
+  let stopLatched = false;
   let safetyBusy = false;
-  
+
   function setSafetyButton(latched) {
     const btn = document.getElementById("safetyToggleBtn");
-    if (!btn) return;
-
     stopLatched = !!latched;
-
-    if (stopLatched) {
-      btn.textContent = "RESUME";
-      btn.classList.remove("danger");     // make resume look "normal"
-    } else {
-      btn.textContent = "STOP";
-      btn.classList.add("danger");        // make stop look dangerous
-    }
-
-      // disable while in-flight
+    btn.textContent = stopLatched ? "RESUME" : "STOP";
+    btn.classList.toggle("danger", !stopLatched);
     btn.disabled = safetyBusy;
   }
 
   async function refreshSafetyStatus() {
-    if (!ensureLoggedIn()) return;
-
-    const r = await httpGet("/safety/status", { bypassCommsGate: true }); // <- add bypass
+    if (!Go2Shared.ensureLoggedIn()) return;
+    const r = await Go2Shared.httpGet("/safety/status", { bypassCommsGate: true });
     if (r.ok) {
-      try {
-        const data = JSON.parse(r.text);
-        setSafetyButton(!!data.stop_latched);
-      } catch (_) {}
+      try { setSafetyButton(JSON.parse(r.text).stop_latched); } catch {}
     }
-
-    setStatus(
-      r.ok ? "Safety status ✅" : `Safety status failed (HTTP ${r.status})`,
-      r.ok,
-      `URL: ${r.url}\n${r.text}`
-    );
-
     return r;
   }
 
   async function toggleSafety() {
-    if (!ensureLoggedIn()) return;
-    if (safetyBusy) return;
-    
+    if (!Go2Shared.ensureLoggedIn() || safetyBusy) return;
     safetyBusy = true;
-    setSafetyButton(stopLatched); // updates disabled state
-    
+    setSafetyButton(stopLatched);
+
     try {
       if (!stopLatched) {
-        // IMPORTANT: bypass comms gate for safety endpoints
-        const r = await httpPost("/safety/stop", null, { bypassCommsGate: true });
-      
-        if (!r.ok) {
-          setStatus(`STOP failed (HTTP ${r.status})`, false, `URL: ${r.url}\n${r.text}`);
-          // do NOT change COMMS_ENABLED or UI on failure
-          await refreshSafetyStatus();
-          return;
+        const r = await Go2Shared.httpPost("/safety/stop", null, { bypassCommsGate: true });
+        if (!r.ok) { Go2Shared.setStatus(`STOP failed (HTTP ${r.status})`, false, `URL: ${r.url}\n${r.text}`); return; }
+        Go2Shared.state.COMMS_ENABLED = false;
+        Go2Shared.setStatus("STOP latched 🔒", true, `URL: ${r.url}\n${r.text}`);
+      } else {
+        const r = await Go2Shared.httpPost("/safety/resume", null, { bypassCommsGate: true });
+        if (!r.ok) { Go2Shared.setStatus(`RESUME failed (HTTP ${r.status})`, false, `URL: ${r.url}\n${r.text}`); return; }
+        Go2Shared.state.COMMS_ENABLED = true;
+        Go2Shared.setStatus("RESUME ✅", true, `URL: ${r.url}\n${r.text}`);
+
+        // reconnect open terminals
+        for (const n of [1,2,3]) {
+          if (terminals[n].open) connectTerminalWs(n);
         }
-      
-        // Only disable comms after STOP succeeded
-        COMMS_ENABLED = false;
-      
-        setStatus(
-          "STOP latched 🔒",
-          true,
-          `URL: ${r.url}\n${r.text}\n\nNo actions/teleop will be sent until RESUME is pressed.`
-        );
-      
-        // Confirm server truth
-        await refreshSafetyStatus();
-        return;
       }
-    
-      // RESUME path
-      const r2 = await httpPost("/safety/resume", null, { bypassCommsGate: true });
-    
-      if (!r2.ok) {
-        setStatus(`RESUME failed (HTTP ${r2.status})`, false, `URL: ${r2.url}\n${r2.text}`);
-        // keep COMMS disabled unless server actually unlatched
-        await refreshSafetyStatus();
-        return;
-      }
-    
-      // Re-enable comms only after resume success
-      COMMS_ENABLED = true;
-    
-      // Reconnect terminals that are marked open
-      for (const n of [1,2,3]) {
-        if (terminals[n].open) connectTerminalWs(n);
-      }
-    
-      setStatus("RESUME ✅", true, `URL: ${r2.url}\n${r2.text}\n\nActions/teleop are enabled again.`);
-    
-      // Confirm server truth (this also sets the button correctly)
-      await refreshSafetyStatus();
-    
     } finally {
       safetyBusy = false;
       await refreshSafetyStatus();
     }
   }
 
-
   // ----------------------------
-  // Teleop enabled/disabled loop
+  // Joystick -> /teleop
   // ----------------------------
-  let latest = { lx: 0, ly: 0, rx: 0, ry: 0 };
-
-  // Tuning (safe defaults)
-  const MAX_LIN = 0.6;   // m/s
-  const MAX_ANG = 1.2;   // rad/s
-  const SEND_HZ = 20;    // send rate
+  let latest = { lx: 0, ly: 0, rx: 0 };
+  const MAX_LIN = 0.6;
+  const MAX_ANG = 1.2;
+  const SEND_HZ = 20;
   const SEND_PERIOD_MS = Math.floor(1000 / SEND_HZ);
 
-  let zeroSentAfterStop = false;
-
   function mapToCmd(lx, ly, rx) {
-    // Joystick y is positive down; invert so up = forward
-    const linear_x = (-ly) * MAX_LIN;
-    const linear_y = (lx) * MAX_LIN;     // strafe
-    const angular_z = (rx) * MAX_ANG;    // turn
+    const linear_x  = (-ly) * MAX_LIN;
+    const linear_y  = (lx)  * MAX_LIN;
+    const angular_z = (rx)  * MAX_ANG;
     return { linear_x, linear_y, angular_z };
   }
 
-  async function sendTeleop(lx, ly, rx, quiet=false) {
-    if (!ensureLoggedIn()) return;
+  async function sendTeleop(lx, ly, rx) {
+    if (!Go2Shared.ensureLoggedIn() || !Go2Shared.state.COMMS_ENABLED) return;
     const cmd = mapToCmd(lx, ly, rx);
-    try {
-      const r = await httpPost("/teleop", cmd);
-      if (!r.ok) {
-        setStatus(
-          `Teleop failed (HTTP ${r.status})`,
-          false,
-          `URL: ${r.url}\n${r.text}\n\nIf you see HTTP 501, you're hitting :8081 not :8000.`
-        );
-      } else if (!quiet) {
-        setStatus(
-          `Teleop: vx=${cmd.linear_x.toFixed(2)} vy=${cmd.linear_y.toFixed(2)} wz=${cmd.angular_z.toFixed(2)}`,
-          true
-        );
-      }
-      if (!r.ok && (r.status === 403 || r.status === 409)) {
-        teleopEnabled = false;
-        setTeleopButton(false);
-        stopTeleopLoop();
-        setStatus("Teleop disabled (lost lease)", false, r.text);
-        return;
-      }
-    } catch (e) {
-      setStatus(
-        "Teleop network error",
-        false,
-        `API base was: ${baseUrl()}\n` + String(e) +
-        "\n\nTip: API must be http://<go2-ip>:8000 (NOT :8081)."
-      );
+    const r = await Go2Shared.httpPost("/teleop", cmd);
+    if (!r.ok) {
+      Go2Shared.setStatus(`Teleop failed (HTTP ${r.status})`, false, `URL: ${r.url}\n${r.text}`);
     }
   }
 
-
-  // ----------------------------
-  // Joystick implementation (canvas)
-  // ----------------------------
   function makeJoystick(canvasId, onMove) {
     const canvas = document.getElementById(canvasId);
     const ctx = canvas.getContext("2d");
@@ -693,72 +225,57 @@
       const w = canvas.width, h = canvas.height;
       ctx.clearRect(0, 0, w, h);
 
-      const centerX = w / 2;
-      const centerY = h / 2;
-      const radius = Math.min(w, h) * 0.35;
-      const knobR = Math.min(w, h) * 0.08;
+      const cx = w/2, cy = h/2;
+      const r = Math.min(w,h)*0.35;
+      const kr = Math.min(w,h)*0.08;
+
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+      ctx.strokeStyle="#ddd"; ctx.lineWidth=4*devicePixelRatio; ctx.stroke();
 
       ctx.beginPath();
-      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-      ctx.strokeStyle = "#ddd";
-      ctx.lineWidth = 4 * devicePixelRatio;
-      ctx.stroke();
+      ctx.moveTo(cx-r,cy); ctx.lineTo(cx+r,cy);
+      ctx.moveTo(cx,cy-r); ctx.lineTo(cx,cy+r);
+      ctx.strokeStyle="#eee"; ctx.lineWidth=2*devicePixelRatio; ctx.stroke();
 
-      ctx.beginPath();
-      ctx.moveTo(centerX - radius, centerY);
-      ctx.lineTo(centerX + radius, centerY);
-      ctx.moveTo(centerX, centerY - radius);
-      ctx.lineTo(centerX, centerY + radius);
-      ctx.strokeStyle = "#eee";
-      ctx.lineWidth = 2 * devicePixelRatio;
-      ctx.stroke();
-
-      const kx = centerX + nx * radius;
-      const ky = centerY + ny * radius;
-
-      ctx.beginPath();
-      ctx.arc(kx, ky, knobR, 0, Math.PI * 2);
+      const kx = cx + nx*r;
+      const ky = cy + ny*r;
+      ctx.beginPath(); ctx.arc(kx,ky,kr,0,Math.PI*2);
       ctx.fillStyle = isActive ? "#e9f2ff" : "#f5f5f5";
-      ctx.strokeStyle = "#bbb";
-      ctx.lineWidth = 3 * devicePixelRatio;
-      ctx.fill();
-      ctx.stroke();
+      ctx.strokeStyle="#bbb"; ctx.lineWidth=3*devicePixelRatio;
+      ctx.fill(); ctx.stroke();
     }
 
     function pointerToNorm(e) {
       const rect = canvas.getBoundingClientRect();
       const x = (e.clientX - rect.left) / rect.width;
       const y = (e.clientY - rect.top) / rect.height;
-
       let nx = (x - 0.5) * 2;
       let ny = (y - 0.5) * 2;
-
       const mag = Math.hypot(nx, ny);
-      if (mag > 1) { nx /= mag; ny /= mag; }
-
+      if (mag > 1) { nx/=mag; ny/=mag; }
       return { nx, ny };
     }
 
     canvas.addEventListener("pointerdown", (e) => {
       canvas.setPointerCapture(e.pointerId);
       active = true;
-      const { nx, ny } = pointerToNorm(e);
-      draw(nx, ny, true);
-      onMove(nx, ny, true);
+      const {nx,ny} = pointerToNorm(e);
+      draw(nx,ny,true);
+      onMove(nx,ny,true);
     });
 
     canvas.addEventListener("pointermove", (e) => {
       if (!active) return;
-      const { nx, ny } = pointerToNorm(e);
-      draw(nx, ny, true);
-      onMove(nx, ny, true);
+      const {nx,ny} = pointerToNorm(e);
+      draw(nx,ny,true);
+      onMove(nx,ny,true);
     });
 
-    function release(e) {
+    function release() {
       if (!active) return;
       active = false;
-      draw(0, 0, false);
-      onMove(0, 0, false);
+      draw(0,0,false);
+      onMove(0,0,false);
     }
 
     canvas.addEventListener("pointerup", release);
@@ -768,60 +285,30 @@
     resize();
   }
 
-  // Wire joysticks into teleop stream
-  makeJoystick("joyLeft", (x, y, active) => {
+  makeJoystick("joyLeft", (x,y,active) => {
     latest.lx = active ? x : 0;
     latest.ly = active ? y : 0;
   });
 
-  makeJoystick("joyRight", (x, y, active) => {
+  makeJoystick("joyRight", (x,y,active) => {
     latest.rx = active ? x : 0;
-    latest.ry = active ? y : 0;
   });
 
   window.setInterval(() => {
-    if (!ensureLoggedIn()) return;
-    if (!COMMS_ENABLED) return;
-
+    if (!Go2Shared.ensureLoggedIn() || !Go2Shared.state.COMMS_ENABLED) return;
     const eps = 0.01;
-    if (Math.abs(latest.lx) < eps && Math.abs(latest.ly) < eps && Math.abs(latest.rx) < eps) {
-      return; // don't spam zeros
-    }
-
-    sendTeleop(latest.lx, latest.ly, latest.rx, true);
+    if (Math.abs(latest.lx) < eps && Math.abs(latest.ly) < eps && Math.abs(latest.rx) < eps) return;
+    sendTeleop(latest.lx, latest.ly, latest.rx);
   }, SEND_PERIOD_MS);
 
   // ----------------------------
-  // Terminal(s) (xterm.js) with fit + autoscroll + resize
+  // Terminals using Go2Shared.connectTerminalWs
   // ----------------------------
   const terminals = {
-    1: { term: null, fit: null, ws: null, open: false, ro: null, follow: true },
-    2: { term: null, fit: null, ws: null, open: false, ro: null, follow: true },
-    3: { term: null, fit: null, ws: null, open: false, ro: null, follow: true },
+    1: { term: null, fit: null, ws: null, open: false, ro: null },
+    2: { term: null, fit: null, ws: null, open: false, ro: null },
+    3: { term: null, fit: null, ws: null, open: false, ro: null },
   };
-
-  function apiWsBase() {
-    const api = baseUrl();               // e.g. http://192.168.123.18:8000
-    const u = new URL(api);
-    const wsProto = u.protocol === "https:" ? "wss" : "ws";
-    return `${wsProto}://${u.host}`;
-  }
-
-  function isNearBottom(t, threshold = 2) {
-    return (t.buffer.active.length - (t.buffer.active.viewportY + t.rows)) <= threshold;
-  }
-
-  function updateFollowFlag(n) {
-    const st = terminals[n];
-    if (!st.term) return;
-    st.follow = isNearBottom(st.term);
-  }
-
-  function sendTermResize(n) {
-    const st = terminals[n];
-    if (!st.term || !st.ws || st.ws.readyState !== WebSocket.OPEN) return;
-    st.ws.send(JSON.stringify({ resize: { cols: st.term.cols, rows: st.term.rows } }));
-  }
 
   function anyTerminalOpen() {
     return terminals[1].open || terminals[2].open || terminals[3].open;
@@ -832,79 +319,40 @@
     wrap.style.display = anyTerminalOpen() ? "grid" : "none";
   }
 
+  function sendTermResize(n) {
+    const st = terminals[n];
+    if (!st.term || !st.ws || st.ws.readyState !== WebSocket.OPEN) return;
+    st.ws.send(JSON.stringify({ resize: { cols: st.term.cols, rows: st.term.rows } }));
+  }
+
   function destroyTerminal(n) {
     const st = terminals[n];
 
-    // Close ws
     try { if (st.ws && st.ws.readyState === WebSocket.OPEN) st.ws.close(); } catch (_) {}
     st.ws = null;
 
-    // Resize observer
     try { if (st.ro) st.ro.disconnect(); } catch (_) {}
     st.ro = null;
 
-    // Dispose terminal
     try { if (st.term) st.term.dispose(); } catch (_) {}
     st.term = null;
     st.fit = null;
 
-    // Clear DOM container
     const container = document.getElementById(`terminal${n}`);
     if (container) container.innerHTML = "";
 
     st.open = false;
-    st.follow = true;
-
-    // Hide panel
-    const panel = document.getElementById(`terminalPanel${n}`);
-    if (panel) panel.style.display = "none";
+    document.getElementById(`terminalPanel${n}`).style.display = "none";
 
     updateTerminalsWrapVisibility();
   }
 
   function connectTerminalWs(n) {
     const st = terminals[n];
-    if (!st.term) return;
-    if (!AUTH_TOKEN) {
-      st.term.write("\r\n[Login required]\r\n");
-      return;
-    }
-
-    // If already connected, do nothing
-    if (st.ws && (st.ws.readyState === WebSocket.OPEN || st.ws.readyState === WebSocket.CONNECTING)) {
-      return;
-    }
-
-    // Create fresh WS
-    st.ws = new WebSocket(`${apiWsBase()}/ws/terminal?token=${encodeURIComponent(AUTH_TOKEN)}`);
-
-    st.ws.onopen = () => {
-      st.term.write(`\r\n[Connected to Go2 terminal ${n}]\r\n`, () => {
-        const wasFollowing = st.follow;
-        if (st.fit) st.fit.fit();
-        sendTermResize(n);
-        if (wasFollowing) st.term.scrollToBottom();
-        updateFollowFlag(n);
-        st.term.focus();
-      });
-    };
-
-    st.ws.onmessage = (e) => {
-      const shouldFollow = st.follow;
-      st.term.write(e.data, () => {
-        if (shouldFollow) st.term.scrollToBottom();
-        updateFollowFlag(n);
-      });
-    };
-
-    st.ws.onclose = () => {
-      st.term && st.term.write("\r\n[Terminal disconnected]\r\n");
-      st.ws = null; // IMPORTANT: allow reconnect
-    };
-
-    st.ws.onerror = () => {
-      st.term && st.term.write("\r\n[Terminal error]\r\n");
-    };
+    Go2Shared.connectTerminalWs(st, n, () => {
+      if (st.fit) st.fit.fit();
+      sendTermResize(n);
+    });
   }
 
   function ensureTerminalStarted(n) {
@@ -929,78 +377,48 @@
     st.term.open(container);
     st.fit.fit();
 
-    // ✅ Make clicks focus the terminal (fixes “can’t type”)
     container.addEventListener("pointerdown", () => st.term && st.term.focus());
 
-    // Scroll tracking
-    container.addEventListener("wheel", () => setTimeout(() => updateFollowFlag(n), 0), { passive: true });
-    container.addEventListener("touchmove", () => setTimeout(() => updateFollowFlag(n), 0), { passive: true });
-
-    // ✅ Wire keyboard -> websocket (works even after reconnect)
     st.term.onData((data) => {
       if (st.ws && st.ws.readyState === WebSocket.OPEN) st.ws.send(data);
     });
 
-    // Resize observer per terminal
     st.ro = new ResizeObserver(() => {
       window.clearTimeout(window[`__termResizeT${n}`]);
       window[`__termResizeT${n}`] = window.setTimeout(() => {
         if (!st.fit || !st.term) return;
-        const wasFollowing = st.follow;
         st.fit.fit();
         sendTermResize(n);
-        if (wasFollowing) st.term.scrollToBottom();
-        updateFollowFlag(n);
       }, 50);
     });
     st.ro.observe(container);
 
-    // ✅ Connect WS initially
     connectTerminalWs(n);
   }
 
   function openTerminal(n) {
-    if (!ensureLoggedIn()) return;
+    if (!Go2Shared.ensureLoggedIn()) return;
 
-    const panel = document.getElementById(`terminalPanel${n}`);
-    panel.style.display = "block";
+    document.getElementById(`terminalPanel${n}`).style.display = "block";
     terminals[n].open = true;
-
     updateTerminalsWrapVisibility();
 
     ensureTerminalStarted(n);
-    connectTerminalWs(n); // ✅ in case it exists but ws was closed
 
     setTimeout(() => {
       const st = terminals[n];
       if (!st.term) return;
-      const wasFollowing = st.follow;
       if (st.fit) st.fit.fit();
       sendTermResize(n);
-      if (wasFollowing) st.term.scrollToBottom();
-      updateFollowFlag(n);
       st.term.focus();
-    }, 150);
+    }, 120);
   }
-
 
   function toggleTerminalN(n) {
     const st = terminals[n];
-    if (st.open) {
-      destroyTerminal(n);
-      return;
-    }
+    if (st.open) { destroyTerminal(n); return; }
     openTerminal(n);
   }
-
-  function closeAllTerminals() {
-    destroyTerminal(1);
-    destroyTerminal(2);
-    destroyTerminal(3);
-  }
-
-  </script>
-<script>
 </script>
 </body>
 </html>

@@ -8,8 +8,11 @@ import termios
 import hmac
 from fastapi import WebSocket, WebSocketDisconnect
 
-GO2_API_TOKEN = os.getenv("GO2_API_TOKEN", "")
+# Auth toggle (same convention as main.py)
 AUTH_ENABLED = os.getenv("GO2_AUTH_ENABLED", "1") not in ("0", "false", "False")
+
+# Token is only required/used if AUTH_ENABLED is True
+GO2_API_TOKEN = (os.getenv("GO2_API_TOKEN") or "").strip()
 
 class TerminalSession:
     def __init__(self):
@@ -72,15 +75,17 @@ class TerminalSession:
         os.write(self.fd, data.encode())
 
 async def terminal_ws(websocket: WebSocket):
-    # Authenticate BEFORE accept
-    token = websocket.query_params.get("token", "")
+    # Authenticate BEFORE accept (only if enabled)
+    token = (websocket.query_params.get("token") or "").strip()
 
     if AUTH_ENABLED:
         if not GO2_API_TOKEN:
+            # server misconfigured for auth-enabled mode
             await websocket.close(code=1011)
             return
 
         if not hmac.compare_digest(token, GO2_API_TOKEN):
+            # policy violation / auth failed
             await websocket.close(code=1008)
             return
 

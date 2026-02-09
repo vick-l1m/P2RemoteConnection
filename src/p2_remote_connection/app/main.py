@@ -27,14 +27,17 @@ if os.getenv("DEPLOYMENT_ENV") == "ec2":
 else:
     from .terminal import terminal_ws
 
+# Authentication
+# ------------------------------------------------------------
 # Option to disable auth for testing
 AUTH_ENABLED = os.getenv("GO2_AUTH_ENABLED", "1") not in ("0", "false", "False")
 
-# Authentication
-# ------------------------------------------------------------
+# Authentication token (ONLY required if auth enabled)
 GO2_API_TOKEN = (os.getenv("GO2_API_TOKEN") or "").strip()
-if not GO2_API_TOKEN:
-    raise RuntimeError("GO2_API_TOKEN is not set (or is empty)")
+
+if AUTH_ENABLED and not GO2_API_TOKEN:
+    raise RuntimeError("GO2_API_TOKEN is not set (or is empty) while GO2_AUTH_ENABLED=1")
+
 
 def require_token(authorization: str = Header(None)) -> str:
     # 🔓 Auth disabled (dev / sim mode)

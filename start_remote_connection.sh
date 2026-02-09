@@ -9,8 +9,10 @@ API_HOST="0.0.0.0"
 API_PORT="8000"
 UI_PORT="8081"
 
-# Make sure HOME is set correctly under systemd
-export HOME="/home/unitree"
+# Only override HOME under systemd (when HOME may be empty)
+if [ -z "${HOME:-}" ] || [ "$HOME" = "/" ]; then
+  export HOME="/home/unitree"
+fi
 
 # ----------------------------
 # UI selection by CLI arg
@@ -104,19 +106,35 @@ export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}"
 # export CYCLONEDDS_URI="file://$HOME/unitree_ros2/cyclonedds.xml"
 
 # ----------------------------
-# Load Go2 API token
+# Turn on/off Authentication (set BEFORE token handling)
 # ----------------------------
-if [ -f "$HOME/.go2_token" ]; then
-  export GO2_API_TOKEN="$(tr -d '\r\n' < "$HOME/.go2_token")"
-else
-  echo "[run_all] ❌ ERROR: ~/.go2_token not found"
-  exit 1
-fi
-echo "[run_all] GO2_API_TOKEN loaded"
+export GO2_AUTH_ENABLED="${GO2_AUTH_ENABLED:-0}"   # default: 0 for your testing
+# export GO2_AUTH_ENABLED="1"                      # enable auth
 
-# Turn on and Off Authentication via env var GO2_AUTH_ENABLED
-export GO2_AUTH_ENABLED="0"   # Disable auth (for testing)
-# export GO2_AUTH_ENABLED="1"   # Enable auth (default) 
+# ----------------------------
+# Load Go2 API token (ONLY if auth is enabled)
+# ----------------------------
+TOKEN_FILE="${GO2_TOKEN_FILE:-$HOME/.go2_token}"
+
+if [ "$GO2_AUTH_ENABLED" = "1" ] || [ "$GO2_AUTH_ENABLED" = "true" ]; then
+  if [ -f "$TOKEN_FILE" ]; then
+    export GO2_API_TOKEN="$(tr -d '\r\n' < "$TOKEN_FILE")"
+  else
+    echo "[run_all] ❌ ERROR: $TOKEN_FILE not found (GO2_AUTH_ENABLED=1)"
+    exit 1
+  fi
+
+  if [ -z "${GO2_API_TOKEN:-}" ]; then
+    echo "[run_all] ❌ ERROR: GO2_API_TOKEN is empty (token file: $TOKEN_FILE)"
+    exit 1
+  fi
+
+  echo "[run_all] GO2_API_TOKEN loaded"
+else
+  # Auth disabled: do NOT read token file
+  export GO2_API_TOKEN=""
+  echo "[run_all] 🔓 Auth disabled (GO2_AUTH_ENABLED=0): skipping token load"
+fi
 
 # ----------------------------
 # 1) Start FastAPI backend
