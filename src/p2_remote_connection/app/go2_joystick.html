@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Go2 Joysticks</title>
 
-  <link rel="stylesheet" href="./shared.css" />
-
+  <link rel="stylesheet" href="/app/static/shared.css">
+  
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css" />
   <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
 
-  <script src="./shared.js"></script>
+  <script src="/app/static/shared.js"></script>
 </head>
 
 <body>
@@ -20,8 +20,7 @@
     <div class="loginCard">
       <h2>Connect to Go2</h2>
       <div class="loginForm">
-        <input id="loginBaseUrl" placeholder="http://robot-ip:8000 or https://robot.domain"
-               value="https://p2dingo-control-backend.p2agentx.com" />
+        <input id="loginBaseUrl" placeholder="http://robot-ip:8000 or https://robot.domain"/>
         <input id="loginToken" placeholder="Password" type="password" />
         <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#333;">
           <input id="showPw" type="checkbox" onclick="Go2Shared.togglePasswordVisibility()" />
@@ -35,7 +34,7 @@
   </div>
 
   <!-- MAIN APP -->
-  <div id="appRoot" class="appLocked">
+  <div id="appRoot">
     <div class="card" style="max-width: 760px;">
       <h1>Unitree Go2 – Phone Teleop</h1>
 
@@ -109,8 +108,9 @@
 
 <script>
   // ---- init shared ----
-  window.addEventListener("DOMContentLoaded", () => {
-    Go2Shared.init({ defaultApi: "https://p2dingo-control-backend.p2agentx.com" });
+  window.addEventListener("DOMContentLoaded", async () => {
+    await Go2Shared.init({ defaultApi: "", showAuthButtons: true });
+    updateModeUI();
     setTimeout(refreshSafetyStatus, 200);
   });
 

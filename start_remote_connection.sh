@@ -14,6 +14,11 @@ if [ -z "${HOME:-}" ] || [ "$HOME" = "/" ]; then
   export HOME="/home/unitree"
 fi
 
+get_best_ip() {
+  # Try to get the source IP used to reach the internet (works on most Linux)
+  ip route get 1.1.1.1 2>/dev/null | awk '/src/ {for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}'
+}
+
 # ----------------------------
 # UI selection by CLI arg
 # ----------------------------
@@ -212,6 +217,12 @@ ok_or_die "UI server" "$UI_PID"
 
 echo ""
 echo "[run_all] ✅ All started."
+
+HOST_IP="$(get_best_ip)"
+if [ -z "$HOST_IP" ]; then
+  HOST_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+fi
+HOST_IP="${HOST_IP:-127.0.0.1}"
 
 if [ "$MODE" = "terminal" ]; then
   echo "[run_all] UI:  http://<this-machine-ip>:$UI_PORT/app/go2_terminal_only.html"

@@ -32,6 +32,17 @@
     // localStorage keys
     LS_URL_KEY: "go2_baseUrl",
     LS_TOKEN_KEY: "go2_token",
+    authEnabled: true,
+  };
+
+  Go2Shared.fetchConfig = async function fetchConfig() {
+    try {
+      const r = await fetch(Go2Shared.baseUrl() + "/config");
+      if (!r.ok) return null;
+      return await r.json();
+    } catch {
+      return null;
+    }
   };
 
   // ----------------------------
@@ -53,16 +64,26 @@
   };
 
   Go2Shared.authHeaders = function authHeaders() {
+    if (!Go2Shared.cfg.authEnabled) return {};
     const t = Go2Shared.state.AUTH_TOKEN;
     return t ? { Authorization: `Bearer ${t}` } : {};
   };
-
+  
   Go2Shared.apiWsBase = function apiWsBase() {
     const api = Go2Shared.baseUrl();               // e.g. http://192.168.x.x:8000 or https://...
     const u = new URL(api);
     const wsProto = u.protocol === "https:" ? "wss" : "ws";
     return `${wsProto}://${u.host}`;
   };
+
+  Go2Shared.computeDefaultApi = function computeDefaultApi() {
+    // If UI is opened as http://192.168.x.x:8081/... then hostname is 192.168.x.x
+    const host = window.location.hostname; // no port
+    const proto = window.location.protocol; // "http:" or "https:"
+    const apiPort = 8000;
+    return `${proto}//${host}:${apiPort}`;
+  };
+
 
   // ----------------------------
   // UI lock/unlock
@@ -116,7 +137,15 @@
 
   Go2Shared.ensureLoggedIn = function ensureLoggedIn() {
     const s = Go2Shared.state;
-    if (!s.ROBOT_BASE_URL || !s.AUTH_TOKEN) {
+    
+    if (!s.ROBOT_BASE_URL) {
+      const msg = $("loginMsg");
+      if (msg) msg.textContent = "Please enter robot URL.";
+      Go2Shared.lockUI();
+      return false;
+    }
+
+    if (Go2Shared.cfg.authEnabled && !s.AUTH_TOKEN) {
       const msg = $("loginMsg");
       if (msg) msg.textContent = "Please log in.";
       Go2Shared.lockUI();
@@ -159,24 +188,23 @@
   // ----------------------------
   Go2Shared.httpGet = async function httpGet(path, opts = {}) {
     const url = Go2Shared.baseUrl() + path;
-
+  
     if (!Go2Shared.commsAllowed(path, opts)) {
       return { ok: false, status: 0, text: "Comms disabled", url };
     }
-
+  
     const r = await fetch(url, { headers: Go2Shared.authHeaders() });
     const t = await r.text();
-
-    if (r.status === 401 || r.status === 403) {
-      // invalidate auth + re-lock
+  
+    // Only force relogin if auth is enabled
+    if (Go2Shared.cfg.authEnabled && (r.status === 401 || r.status === 403)) {
       Go2Shared.state.AUTH_TOKEN = "";
-      Go2Shared.state.ROBOT_BASE_URL = "";
       Go2Shared.clearAuth();
       Go2Shared.lockUI();
       const msg = $("loginMsg");
       if (msg) msg.textContent = "Invalid token. Please log in again.";
     }
-
+  
     return { ok: r.ok, status: r.status, text: t, url };
   };
 
@@ -233,7 +261,12 @@
     const url = urlEl ? urlEl.value.trim().replace(/\/+$/, "") : "";
     const token = tokenEl ? tokenEl.value.trim() : "";
 
-    if (!url || !token) {
+    if (!url) {
+      if (msg) msg.textContent = "Please enter robot URL.";
+      Go2Shared.lockUI();
+      return;
+    }
+    if (Go2Shared.cfg.authEnabled && !token) {
       if (msg) msg.textContent = "Please enter robot URL and password.";
       Go2Shared.lockUI();
       return;
@@ -332,69 +365,97 @@
   // ----------------------------
   // Auto-init (load remembered auth, set default URL, lock/unlock)
   // ----------------------------
-  Go2Shared.init = function init({ defaultApi = "", showAuthButtons = false } = {}) {
-    Go2Shared.cfg.defaultApi = defaultApi;
-    Go2Shared.cfg.showAuthButtons = !!showAuthButtons;
+Go2Shared.fetchConfig = async function fetchConfig() {
+  try {
+    const r = await fetch(Go2Shared.baseUrl() + "/config");
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  }
+};
 
-    // UI host hint
-    setText("uiHost", location.origin);
+Go2Shared.httpGet = async function httpGet(path, opts = {}) {
+  const url = Go2Shared.baseUrl() + path;
 
-    // set default API into inputs
-    if (defaultApi) {
-      const loginUrl = $("loginBaseUrl");
-      const baseInput = $("baseUrl");
-      if (loginUrl) loginUrl.value = defaultApi;
-      if (baseInput) baseInput.value = defaultApi;
-      setText("apiHost", defaultApi);
-    }
+  if (!Go2Shared.commsAllowed(path, opts)) {
+    return { ok: false, status: 0, text: "Comms disabled", url };
+  }
 
-    // render optional auth buttons
-    Go2Shared.renderAuthButtons();
+  const r = await fetch(url, { headers: Go2Shared.authHeaders() });
+  const t = await r.text();
 
-    // wire enter key
-    Go2Shared.wireEnterToUnlock();
+  // Only force relogin if auth is enabled
+  if (Go2Shared.cfg.authEnabled && (r.status === 401 || r.status === 403)) {
+    Go2Shared.state.AUTH_TOKEN = "";
+    Go2Shared.clearAuth();
+    Go2Shared.lockUI();
+    const msg = $("loginMsg");
+    if (msg) msg.textContent = "Invalid token. Please log in again.";
+  }
 
-    // load saved auth
-    const { u, t } = Go2Shared.loadAuth();
-    if (u && t) {
-      Go2Shared.state.ROBOT_BASE_URL = u;
-      Go2Shared.state.AUTH_TOKEN = t;
+  return { ok: r.ok, status: r.status, text: t, url };
+};
 
-      const loginUrl = $("loginBaseUrl");
-      const loginToken = $("loginToken");
-      const baseInput = $("baseUrl");
+Go2Shared.init = async function init({ defaultApi = "", showAuthButtons = false } = {}) {
+  if (!defaultApi) defaultApi = Go2Shared.computeDefaultApi();
 
-      if (loginUrl) loginUrl.value = u;
-      if (loginToken) loginToken.value = t;
-      if (baseInput) baseInput.value = u;
-      setText("apiHost", u);
+  Go2Shared.cfg.defaultApi = defaultApi;
+  Go2Shared.cfg.showAuthButtons = !!showAuthButtons;
 
-      // verify
-      Go2Shared.httpGet("/health")
-        .then((r) => {
-          if (r.ok) {
-            Go2Shared.unlockUI();
-            Go2Shared.setStatus("Unlocked ✅ (remembered)", true);
-          } else {
-            Go2Shared.state.ROBOT_BASE_URL = "";
-            Go2Shared.state.AUTH_TOKEN = "";
-            Go2Shared.clearAuth();
-            Go2Shared.lockUI();
-          }
-        })
-        .catch(() => {
-          Go2Shared.state.ROBOT_BASE_URL = "";
-          Go2Shared.state.AUTH_TOKEN = "";
-          Go2Shared.clearAuth();
-          Go2Shared.lockUI();
-        });
+  setText("uiHost", location.origin);
 
+  // Fill inputs (no hardcoded value in HTML needed)
+  const loginUrl = $("loginBaseUrl");
+  const baseInput = $("baseUrl");
+  if (loginUrl) loginUrl.value = defaultApi;
+  if (baseInput) baseInput.value = defaultApi;
+  setText("apiHost", defaultApi);
+
+  Go2Shared.renderAuthButtons();
+  Go2Shared.wireEnterToUnlock();
+
+  // Make sure baseUrl() works for /config fetch
+  Go2Shared.state.ROBOT_BASE_URL = defaultApi;
+
+  const cfg = await Go2Shared.fetchConfig();
+  if (cfg && typeof cfg.auth_enabled === "boolean") {
+    Go2Shared.cfg.authEnabled = cfg.auth_enabled;
+  }
+
+  // ✅ Set dataset for CSS rules (Option B)
+  document.documentElement.dataset.authEnabled = Go2Shared.cfg.authEnabled ? "1" : "0";
+
+  // ✅ If auth disabled, never show overlay
+  if (!Go2Shared.cfg.authEnabled) {
+    Go2Shared.state.AUTH_TOKEN = "";
+    Go2Shared.unlockUI();
+    Go2Shared.setStatus("Auth disabled 🔓", true);
+    return;
+  }
+
+  // Auth enabled: try remembered login
+  const { u, t } = Go2Shared.loadAuth();
+  if (u && t) {
+    Go2Shared.state.ROBOT_BASE_URL = u;
+    Go2Shared.state.AUTH_TOKEN = t;
+    if (loginUrl) loginUrl.value = u;
+    const loginToken = $("loginToken");
+    if (loginToken) loginToken.value = t;
+    if (baseInput) baseInput.value = u;
+    setText("apiHost", u);
+
+    const r = await Go2Shared.httpGet("/health").catch(() => ({ ok: false }));
+    if (r.ok) {
+      Go2Shared.unlockUI();
+      Go2Shared.setStatus("Unlocked ✅ (remembered)", true);
       return;
     }
+  }
 
-    // default: locked
-    Go2Shared.lockUI();
-  };
+  // No remembered login or it failed => lock
+  Go2Shared.lockUI();
+};
 
   // ----------------------------
   // Terminal WS helpers (xterm page can build on this)
@@ -402,15 +463,20 @@
   Go2Shared.connectTerminalWs = function connectTerminalWs(st, n, onOpenCb) {
     if (!st || !st.term) return;
 
-    if (!Go2Shared.state.AUTH_TOKEN) {
-      st.term.write("\r\n[Login required]\r\n");
-      return;
+    // If auth enabled, require token; if disabled, connect without it
+    let wsUrl = `${Go2Shared.apiWsBase()}/ws/terminal`;
+
+    if (Go2Shared.cfg.authEnabled) {
+      if (!Go2Shared.state.AUTH_TOKEN) {
+        st.term.write("\r\n[Login required]\r\n");
+        return;
+      }
+      wsUrl += `?token=${encodeURIComponent(Go2Shared.state.AUTH_TOKEN)}`;
     }
 
     // already connected/connecting?
     if (st.ws && (st.ws.readyState === WebSocket.OPEN || st.ws.readyState === WebSocket.CONNECTING)) return;
 
-    const wsUrl = `${Go2Shared.apiWsBase()}/ws/terminal?token=${encodeURIComponent(Go2Shared.state.AUTH_TOKEN)}`;
     st.ws = new WebSocket(wsUrl);
 
     st.ws.onopen = () => {

@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Go2 Movement Controller</title>
 
-  <link rel="stylesheet" href="./shared.css" />
-  <script src="./shared.js"></script>
+  <link rel="stylesheet" href="/app/static/shared.css" />
+  <script src="/app/static/shared.js"></script>
 </head>
 
 <body>
@@ -16,8 +16,7 @@
     <div class="loginCard">
       <h2>Connect to Go2</h2>
       <div class="loginForm">
-        <input id="loginBaseUrl" placeholder="http://robot-ip:8000 or https://robot.domain"
-               value="https://p2dingo-control-backend.p2agentx.com" />
+        <input id="loginBaseUrl" placeholder="http://robot-ip:8000 or https://robot.domain"/>
         <input id="loginToken" placeholder="Password" type="password" />
         <button id="unlockBtn" onclick="Go2Shared.login()">Unlock</button>
         <div id="loginMsg" class="loginMsg"></div>
@@ -27,7 +26,7 @@
   </div>
 
   <!-- MAIN APP -->
-  <div id="appRoot" class="appLocked">
+  <div id="appRoot">
     <div class="card">
       <h1>Unitree Go2 – Movement Controller</h1>
 
@@ -48,6 +47,18 @@
       <div class="small" style="margin-top:8px;">
         UI host: <span id="uiHost" class="mono"></span><br/>
         API base: <span id="apiHost" class="mono"></span>
+      </div>
+      
+      <!-- Joysticks -->
+      <div class="grid2">
+        <div class="joyBox">
+          <div class="joyTitle">Left joystick: X=strife, Y=fwd/back</div>
+          <canvas id="joyLeft"></canvas>
+        </div>
+        <div class="joyBox">
+          <div class="joyTitle">Right joystick: X=turn (yaw)</div>
+          <canvas id="joyRight"></canvas>
+        </div>
       </div>
 
       <!-- Movement -->
@@ -111,11 +122,26 @@
 
 <script>
   // ---- init shared ----
-  window.addEventListener("DOMContentLoaded", () => {
-    Go2Shared.init({ defaultApi: "https://p2dingo-control-backend.p2agentx.com" });
+  window.addEventListener("DOMContentLoaded", async () => {
+    await Go2Shared.init({ defaultApi: "", showAuthButtons: true });
     updateModeUI();
-    // if remembered login succeeds, you likely want to sync safety state:
     setTimeout(refreshSafetyStatus, 200);
+  
+    // joysticks start after DOM exists
+    makeJoystick("joyLeft", (x, y, active) => {
+      latest.lx = active ? x : 0;
+      latest.ly = active ? y : 0;
+    });
+    makeJoystick("joyRight", (x, y, active) => {
+      latest.rx = active ? x : 0;
+    });
+  
+    window.setInterval(() => {
+      if (!Go2Shared.ensureLoggedIn() || !Go2Shared.state.COMMS_ENABLED) return;
+      const eps = 0.01;
+      if (Math.abs(latest.lx) < eps && Math.abs(latest.ly) < eps && Math.abs(latest.rx) < eps) return;
+      sendTeleop(latest.lx, latest.ly, latest.rx);
+    }, SEND_PERIOD_MS);
   });
 
   // ----------------------------
@@ -274,6 +300,132 @@
       setAllToggleButtonsEnabled(true);
     }
   }
+
+  // ----------------------------
+  // Joystick -> /teleop
+  // ----------------------------
+  let latest = { lx: 0, ly: 0, rx: 0 };
+  const MAX_LIN = 0.6;
+  const MAX_ANG = 1.2;
+  const SEND_HZ = 20;
+  const SEND_PERIOD_MS = Math.floor(1000 / SEND_HZ);
+
+  function mapToCmd(lx, ly, rx) {
+    const linear_x  = (-ly) * MAX_LIN;
+    const linear_y  = (lx)  * MAX_LIN;
+    const angular_z = (rx)  * MAX_ANG;
+    return { linear_x, linear_y, angular_z };
+  }
+
+  async function sendTeleop(lx, ly, rx) {
+    if (!Go2Shared.ensureLoggedIn() || !Go2Shared.state.COMMS_ENABLED) return;
+    const cmd = mapToCmd(lx, ly, rx);
+    const r = await Go2Shared.httpPost("/teleop", cmd);
+    if (!r.ok) {
+      Go2Shared.setStatus(`Teleop failed (HTTP ${r.status})`, false, `URL: ${r.url}\n${r.text}`);
+    }
+  }
+
+  function makeJoystick(canvasId, onMove) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = Math.floor(rect.width * devicePixelRatio);
+      canvas.height = Math.floor(rect.height * devicePixelRatio);
+      draw(0, 0, false);
+    }
+
+    let active = false;
+
+    function draw(nx, ny, isActive) {
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const cx = w / 2, cy = h / 2;
+      const r = Math.min(w, h) * 0.35;
+      const kr = Math.min(w, h) * 0.08;
+
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.strokeStyle = "#ddd";
+      ctx.lineWidth = 4 * devicePixelRatio;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy);
+      ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r);
+      ctx.strokeStyle = "#eee";
+      ctx.lineWidth = 2 * devicePixelRatio;
+      ctx.stroke();
+
+      const kx = cx + nx * r;
+      const ky = cy + ny * r;
+      ctx.beginPath(); ctx.arc(kx, ky, kr, 0, Math.PI * 2);
+      ctx.fillStyle = isActive ? "#e9f2ff" : "#f5f5f5";
+      ctx.strokeStyle = "#bbb";
+      ctx.lineWidth = 3 * devicePixelRatio;
+      ctx.fill(); ctx.stroke();
+    }
+
+    function pointerToNorm(e) {
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width;
+      const y = (e.clientY - rect.top) / rect.height;
+      let nx = (x - 0.5) * 2;
+      let ny = (y - 0.5) * 2;
+      const mag = Math.hypot(nx, ny);
+      if (mag > 1) { nx /= mag; ny /= mag; }
+      return { nx, ny };
+    }
+
+    canvas.addEventListener("pointerdown", (e) => {
+      canvas.setPointerCapture(e.pointerId);
+      active = true;
+      const { nx, ny } = pointerToNorm(e);
+      draw(nx, ny, true);
+      onMove(nx, ny, true);
+    });
+
+    canvas.addEventListener("pointermove", (e) => {
+      if (!active) return;
+      const { nx, ny } = pointerToNorm(e);
+      draw(nx, ny, true);
+      onMove(nx, ny, true);
+    });
+
+    function release() {
+      if (!active) return;
+      active = false;
+      draw(0, 0, false);
+      onMove(0, 0, false);
+    }
+
+    canvas.addEventListener("pointerup", release);
+    canvas.addEventListener("pointercancel", release);
+    window.addEventListener("resize", resize);
+
+    resize();
+  }
+
+  // Create joysticks
+  makeJoystick("joyLeft", (x, y, active) => {
+    latest.lx = active ? x : 0;
+    latest.ly = active ? y : 0;
+  });
+  makeJoystick("joyRight", (x, y, active) => {
+    latest.rx = active ? x : 0;
+  });
+
+  // Send loop (only sends when non-zero)
+  window.setInterval(() => {
+    if (!Go2Shared.ensureLoggedIn() || !Go2Shared.state.COMMS_ENABLED) return;
+    const eps = 0.01;
+    if (Math.abs(latest.lx) < eps && Math.abs(latest.ly) < eps && Math.abs(latest.rx) < eps) return;
+    sendTeleop(latest.lx, latest.ly, latest.rx);
+  }, SEND_PERIOD_MS);
 </script>
 </body>
 </html>

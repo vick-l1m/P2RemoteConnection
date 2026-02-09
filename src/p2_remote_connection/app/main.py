@@ -165,6 +165,12 @@ async def safety_resume(_=Depends(require_token)):
 async def safety_status(_=Depends(require_token)):
     return {"stop_latched": STOP_LATCHED, "teleop_enabled": TELEOP_ENABLED}
 
+@app.get("/config")
+async def config():
+    return {
+        "auth_enabled": AUTH_ENABLED
+    }
+
 # ------------------------------------------------------------
 # Teleop
 # ------------------------------------------------------------

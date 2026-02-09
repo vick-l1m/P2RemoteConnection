@@ -176,3 +176,6 @@ canvas {
   overflow: auto;
   touch-action: pan-y;
 }
+html[data-auth-enabled="0"] .loginOverlay {
+  display: none !important;
+}
