@@ -237,3 +237,13 @@ html[data-auth-enabled="0"] .loginOverlay {
   padding: 14px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.18);
 }
+#pcdCanvas {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #fff;
+  touch-action: none;
+}
+

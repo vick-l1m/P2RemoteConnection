@@ -339,6 +339,7 @@ private:
   double tick_rate_hz_{5.0};
   int max_occ_{100};
   int full_map_skip_{10};
+  int decay_per_tick_{1};
 
   size_t global_w_{0};
   size_t global_h_{0};

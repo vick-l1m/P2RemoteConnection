@@ -13,13 +13,17 @@ import hmac
  
 import time
 import secrets
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Set 
 
 import json
 import gzip
 from fastapi.responses import Response
 from app.ros_bridge import get_map_store
 
+from dataclasses import dataclass, field
+
+from fastapi.staticfiles import StaticFiles
+from .ros_bridge import get_pcd_store 
 
 # Conditional import: use terminal_ec2 for EC2 deployment, terminal for robot
 if os.getenv("DEPLOYMENT_ENV") == "ec2":
@@ -66,6 +70,10 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Go2 Remote Actions")
+
+HERE = os.path.dirname(__file__)
+STATIC_DIR = os.path.join(HERE, "static")
+app.mount("/app/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 app.add_middleware(
     CORSMiddleware,
@@ -343,3 +351,54 @@ async def sport_action(cmd: str, _=Depends(require_token)):
 
     get_bridge().publish_sport_cmd({"cmd": cmd})
     return {"ok": True, "cmd": cmd}
+
+# ------------------------------------------------------------
+# PointCloud store
+# ------------------------------------------------------------
+@app.websocket("/ws/pcd")
+async def ws_pcd(websocket: WebSocket):
+    token = websocket.query_params.get("token", "")
+
+    if AUTH_ENABLED:
+        if not GO2_API_TOKEN:
+            await websocket.close(code=1011); return
+        if not hmac.compare_digest(token, GO2_API_TOKEN):
+            await websocket.close(code=1008); return
+
+    await websocket.accept()
+    if STOP_LATCHED:
+        await websocket.close(code=1013); return
+
+    store = get_pcd_store()
+
+    # register + capture initial frame
+    async with store.lock:
+        store.clients.add(websocket)
+        initial_header = None
+        initial_gz = None
+        if store.meta is not None and store.raw is not None:
+            initial_header = {
+                "t": "pcd",
+                "seq": store.seq,
+                "meta": store.meta,
+                "n": len(store.raw) // 12,
+            }
+            initial_gz = gzip.compress(store.raw, compresslevel=6)
+
+    try:
+        if initial_header:
+            await websocket.send_text(json.dumps(initial_header))
+            await websocket.send_bytes(initial_gz)
+
+        while True:
+            _ = await websocket.receive_text()  # keepalive ping
+            if STOP_LATCHED:
+                await websocket.close(code=1013)
+                return
+    except Exception:
+        pass
+    finally:
+        async with store.lock:
+            store.clients.discard(websocket)
+
+    

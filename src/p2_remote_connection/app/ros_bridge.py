@@ -10,14 +10,16 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 
 from geometry_msgs.msg import Twist
-from std_msgs.msg import String
+from std_msgs.msg import String as RosString
+from std_msgs.msg import Bool, Float32, UInt8MultiArray
 from nav_msgs.msg import OccupancyGrid
 from map_msgs.msg import OccupancyGridUpdate
 from fastapi import WebSocket
-from std_msgs.msg import Bool
-from std_msgs.msg import Float32
-from std_msgs.msg import String as RosString
 
+
+# ============================================================
+# 2D MAP STORE
+# ============================================================
 @dataclass
 class MapStore:
     meta: Optional[Dict[str, Any]] = None     # {frame_id,resolution,width,height,origin_x,origin_y}
@@ -32,13 +34,9 @@ class MapStore:
         if self.lock is None:
             self.lock = asyncio.Lock()
 
-
 _map_store = MapStore()
 
 async def _broadcast_map_payload(payload: dict):
-    """
-    Send 2 frames: JSON header then gzipped binary bytes.
-    """
     dead = []
     async with _map_store.lock:
         clients = list(_map_store.clients)
@@ -61,18 +59,61 @@ def _i8_list_to_bytes(data) -> bytes:
     return bytes((d & 0xFF) for d in data)
 
 
+# ============================================================
+# 3D POINTCLOUD STORE (xyz32)
+# ============================================================
+@dataclass
+class PointCloudStore:
+    meta: Optional[Dict[str, Any]] = None     # {frame_id, fmt, stride, ...}
+    raw: Optional[bytes] = None               # packed float32 xyz (len = n*12)
+    seq: int = 0
+    clients: Set[WebSocket] = None
+    lock: asyncio.Lock = None
+
+    def __post_init__(self):
+        if self.clients is None:
+            self.clients = set()
+        if self.lock is None:
+            self.lock = asyncio.Lock()
+
+_pcd_store = PointCloudStore()
+
+async def _broadcast_pcd_payload(payload: dict):
+    dead = []
+    async with _pcd_store.lock:
+        clients = list(_pcd_store.clients)
+
+    for ws in clients:
+        try:
+            header = payload.copy()
+            gz = header.pop("gz")
+            await ws.send_text(json.dumps(header))
+            await ws.send_bytes(gz)
+        except Exception:
+            dead.append(ws)
+
+    if dead:
+        async with _pcd_store.lock:
+            for ws in dead:
+                _pcd_store.clients.discard(ws)
+
+
+
+# ============================================================
+# ROS <-> WEB BRIDGE NODE
+# ============================================================
 class WebRosBridge(Node):
     def __init__(self):
         super().__init__("web_ros_bridge")
 
-        # Publishers
+        # ---------------- Publishers ----------------
         self.pub_twist = self.create_publisher(Twist, "/web_teleop", 10)
-        self.pub_action = self.create_publisher(String, "/web_action", 10)
+        self.pub_action = self.create_publisher(RosString, "/web_action", 10)
         self.pub_enabled = self.create_publisher(Bool, "/web_teleop_enabled", 1)
         self.move_forward_pub = self.create_publisher(Float32, "/move_forward_meters", 10)
         self.pub_sport_cmd = self.create_publisher(RosString, "/web_sport_cmd", 10)
 
-        # Map subscriptions
+        # ---------------- Map subscriptions ----------------
         map_qos = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.TRANSIENT_LOCAL,  # full map latched
@@ -85,14 +126,13 @@ class WebRosBridge(Node):
             history=HistoryPolicy.KEEP_LAST,
             depth=10,
         )
-        
-        # Declare parameters BEFORE get_parameter
+
         self.declare_parameter("map_topic", "/map2d")
         self.declare_parameter("map_updates_topic", "/map2d_updates")
-        
+
         map_topic = self.get_parameter("map_topic").value
         map_updates_topic = self.get_parameter("map_updates_topic").value
-        
+
         self.sub_map_full = self.create_subscription(
             OccupancyGrid, map_topic, self._on_map_full, map_qos
         )
@@ -100,12 +140,33 @@ class WebRosBridge(Node):
             OccupancyGridUpdate, map_updates_topic, self._on_map_update, upd_qos
         )
 
+        # ---------------- PointCloud subscriptions ----------------
+        self.declare_parameter("pcd_xyz_topic", "/pcd/xyz32")
+        self.declare_parameter("pcd_meta_topic", "/pcd/meta")
+
+        pcd_xyz_topic = self.get_parameter("pcd_xyz_topic").value
+        pcd_meta_topic = self.get_parameter("pcd_meta_topic").value
+
+        pcd_qos = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.VOLATILE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=2,
+        )
+
+        self.sub_pcd_meta = self.create_subscription(
+            RosString, pcd_meta_topic, self._on_pcd_meta, 10
+        )
+        self.sub_pcd_xyz = self.create_subscription(
+            UInt8MultiArray, pcd_xyz_topic, self._on_pcd_xyz32, pcd_qos
+        )
+
+        self._pcd_meta_cache = {"frame_id": "unknown", "fmt": "xyz32", "stride": 12}
+
+        # AsyncIO loop provided by FastAPI
         self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     def set_asyncio_loop(self, loop: asyncio.AbstractEventLoop):
-        """
-        Call this once from FastAPI startup so ROS callbacks can schedule WS broadcasts.
-        """
         self._loop = loop
 
     # ---------------- Teleop / Action ----------------
@@ -130,18 +191,24 @@ class WebRosBridge(Node):
     def publish_action(self, action: str):
         if not self._ok_to_publish():
             return
-        m = String()
+        m = RosString()
         m.data = action
         self.pub_action.publish(m)
 
-    # ---------------- Move forward helper ----------------
     def publish_move_forward(self, meters: float):
         if not self._ok_to_publish():
             return
         msg = Float32()
         msg.data = float(meters)
         self.move_forward_pub.publish(msg)
-    
+
+    def publish_enabled(self, enabled: bool):
+        if not self._ok_to_publish():
+            return
+        b = Bool()
+        b.data = bool(enabled)
+        self.pub_enabled.publish(b)
+
     # ---------------- Map callbacks ----------------
     def _on_map_full(self, msg: OccupancyGrid):
         raw = _i8_list_to_bytes(msg.data)
@@ -155,7 +222,6 @@ class WebRosBridge(Node):
         }
 
         if self._loop is None:
-            # FastAPI hasn't set loop yet; just store the latest.
             _map_store.meta = meta
             _map_store.full_raw = raw
             _map_store.seq += 1
@@ -168,20 +234,19 @@ class WebRosBridge(Node):
                     _map_store.full_raw = raw
                     _map_store.seq += 1
                     seq = _map_store.seq
-                payload = {
+
+                await _broadcast_map_payload({
                     "t": "f",
                     "seq": seq,
                     "meta": meta,
                     "gz": gzip.compress(raw, compresslevel=6),
-                }
-                await _broadcast_map_payload(payload)
+                })
 
             asyncio.create_task(_set_and_broadcast())
 
         self._loop.call_soon_threadsafe(_schedule)
 
     def _on_map_update(self, msg: OccupancyGridUpdate):
-        # ignore updates until we have a full map
         if _map_store.meta is None or _map_store.full_raw is None:
             return
 
@@ -197,32 +262,75 @@ class WebRosBridge(Node):
                 async with _map_store.lock:
                     _map_store.seq += 1
                     seq = _map_store.seq
-                payload = {
+
+                await _broadcast_map_payload({
                     "t": "u",
                     "seq": seq,
                     "x": x, "y": y, "w": w, "h": h,
                     "gz": gzip.compress(raw, compresslevel=6),
-                }
-                await _broadcast_map_payload(payload)
+                })
 
             asyncio.create_task(_broadcast_only())
 
         self._loop.call_soon_threadsafe(_schedule)
 
-    def publish_enabled(self, enabled: bool):
-        if not self._ok_to_publish():
-            return
-        b = Bool()
-        b.data = bool(enabled)
-        self.pub_enabled.publish(b)
+    # ---------------- PointCloud callbacks ----------------
+    def _on_pcd_meta(self, msg: RosString):
+        try:
+            meta = json.loads(msg.data)
+            if not isinstance(meta, dict):
+                raise ValueError("meta not dict")
+        except Exception:
+            meta = {"frame_id": str(msg.data), "fmt": "xyz32", "stride": 12}
 
+        self._pcd_meta_cache = meta
+        _pcd_store.meta = meta
+
+    def _on_pcd_xyz32(self, msg: UInt8MultiArray):
+        raw = bytes(msg.data)
+        n = len(raw) // 12
+        if n <= 0:
+            return
+    
+        meta = dict(getattr(self, "_pcd_meta_cache", {"frame_id": "unknown"}))
+        meta.setdefault("fmt", "xyz32")
+        meta.setdefault("stride", 12)
+    
+        if self._loop is None:
+            _pcd_store.meta = meta
+            _pcd_store.raw = raw
+            _pcd_store.seq += 1
+            return
+    
+        def _schedule():
+            async def _set_and_broadcast():
+                async with _pcd_store.lock:
+                    _pcd_store.meta = meta
+                    _pcd_store.raw = raw
+                    _pcd_store.seq += 1
+                    seq = _pcd_store.seq
+    
+                payload = {
+                    "t": "pcd",
+                    "seq": seq,
+                    "meta": meta,
+                    "n": n,
+                    "gz": gzip.compress(raw, compresslevel=6),
+                }
+                await _broadcast_pcd_payload(payload)
+    
+            asyncio.create_task(_set_and_broadcast())
+    
+        self._loop.call_soon_threadsafe(_schedule)
+
+
+
+# ============================================================
+# LIFECYCLE HELPERS
+# ============================================================
 _bridge = None
 
-
 def start_ros_bridge():
-    """
-    Starts ROS once and spins in a background thread.
-    """
     global _bridge
     if _bridge is not None:
         return _bridge
@@ -233,20 +341,16 @@ def start_ros_bridge():
     t = threading.Thread(target=rclpy.spin, args=(_bridge,), daemon=True)
     t.start()
 
-    # default: enabled
     _bridge.publish_enabled(True)
-
     return _bridge
 
-
 def get_bridge() -> WebRosBridge:
-    global _bridge
     if _bridge is None:
         raise RuntimeError("ROS bridge not started")
     return _bridge
 
-
 def get_map_store() -> MapStore:
     return _map_store
 
-    
+def get_pcd_store() -> PointCloudStore:
+    return _pcd_store
