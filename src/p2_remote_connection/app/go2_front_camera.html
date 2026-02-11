@@ -119,28 +119,58 @@
         API base: <span id="apiHost" class="mono"></span>
       </div>
 
-      <!-- CAMERA PANEL -->
+      <!-- CAMERA PANEL: Video -->
       <div class="camPanel">
         <div class="camHeader">
           <div class="camTitle">Front camera stream</div>
           <div class="camHint small" id="camHint">Idle</div>
         </div>
       
-        <!-- ✅ VIDEO AREA ONLY -->
         <div class="camViewport">
           <img id="camImg" alt="Front camera" />
         </div>
       
-        <!-- ✅ CONTROLS BELOW (not inside black box) -->
-        <div class="row" style="margin-top:10px;">
+        <div class="row" style="margin-top:10px; padding:0 12px 12px;">
           <button onclick="startStream()">Start Stream</button>
           <button onclick="stopStream()">Stop Stream</button>
+      
+          <label class="pill" style="display:inline-flex; align-items:center; gap:8px;">
+            <input id="useYoloVideo" type="checkbox" onchange="switchVideoSource()" />
+            Show YOLO boxes
+          </label>
+      
           <span class="pill">Frames: <span id="frameCount">0</span></span>
           <span class="pill">Last: <span id="frameBytes">0</span> bytes</span>
         </div>
       
-        <div class="small" style="margin-top:10px;">
-          Raw JPEG pushed over WebSocket (<span class="mono">/ws/cam_front</span>).
+        <div class="small" style="padding:0 12px 12px;">
+          Raw JPEG pushed over WebSocket (<span class="mono">/ws/cam_front</span>). YOLO boxes uses <span class="mono">/ws/cam_yolo</span>.
+        </div>
+      </div>
+
+      <!-- CAMERA PANEL: YOLO -->
+      <div class="camPanel">
+        <div class="camHeader">
+          <div class="camTitle">YOLO detections</div>
+          <div class="camHint small" id="yoloHint">Idle</div>
+        </div>
+      
+        <div style="padding:10px 12px 12px;">
+          <div class="row">
+            <button onclick="startYolo()">Start YOLO</button>
+            <button onclick="stopYolo()">Stop YOLO</button>
+            <span class="pill">Msgs: <span id="yoloCount">0</span></span>
+          </div>
+      
+          <div id="yoloList"
+               style="margin-top:10px; border:1px solid var(--soft-border); border-radius:12px; padding:10px; max-height:260px; overflow:auto; background:#fff;">
+            <div class="small" style="color:#777;">No detections yet.</div>
+          </div>
+      
+          <details style="margin-top:10px;">
+            <summary class="small" style="cursor:pointer;">Raw JSON</summary>
+            <pre id="yoloRaw" class="mono" style="white-space:pre-wrap; margin-top:10px;">(none)</pre>
+          </details>
         </div>
       </div>
 
@@ -303,7 +333,7 @@
     setCamHint("Connecting...");
 
     let wsUrl;
-    try { wsUrl = camWsUrl(); }
+    try { wsUrl = camWsUrlForMode(); }
     catch (e) { setCamHint(String(e)); return; }
 
     CAM_WS = new WebSocket(wsUrl);
@@ -364,7 +394,7 @@
         img.src = url;
       }
     }
-        
+
     CAM_WS.onmessage = async (ev) => {
       if (!Go2Shared.state.COMMS_ENABLED || stopLatched) return;
     
@@ -527,7 +557,189 @@
       sendTeleop(latest.lx, latest.ly, latest.rx);
     }, SEND_PERIOD_MS);
   }
-</script>
 
+  let YOLO_WS = null;
+  let yoloKeepalive = null;
+  let yoloMsgs = 0;
+  
+  function setYoloHint(t) {
+    const el = document.getElementById("yoloHint");
+    if (el) el.textContent = t;
+  }
+  
+  function yoloWsUrl() {
+    let wsUrl = `${Go2Shared.apiWsBase()}/ws/yolo`;
+    if (Go2Shared.cfg.authEnabled) {
+      if (!Go2Shared.state.AUTH_TOKEN) throw new Error("Login required");
+      wsUrl += `?token=${encodeURIComponent(Go2Shared.state.AUTH_TOKEN)}`;
+    }
+    return wsUrl;
+  }
+  
+  function stopYolo() {
+    if (YOLO_WS) {
+      YOLO_WS.onmessage = null;
+      YOLO_WS.onopen = null;
+      YOLO_WS.onclose = null;
+      YOLO_WS.onerror = null;
+      try { YOLO_WS.close(1000, "stop"); } catch {}
+    }
+    YOLO_WS = null;
+  
+    if (yoloKeepalive) { clearInterval(yoloKeepalive); yoloKeepalive = null; }
+  
+    setYoloHint(stopLatched ? "STOP latched" : "Idle");
+  }
+
+  function startYolo() {
+    if (!Go2Shared.ensureLoggedIn()) return;
+    if (!Go2Shared.state.COMMS_ENABLED || stopLatched) {
+      setYoloHint("STOP latched");
+      return;
+    }
+  
+    yoloMsgs = 0;
+    document.getElementById("yoloCount").textContent = "0";
+    setYoloHint("Connecting...");
+    stopYolo();
+  
+    let wsUrl;
+    try { wsUrl = yoloWsUrl(); }
+    catch (e) { setYoloHint(String(e)); return; }
+  
+    YOLO_WS = new WebSocket(wsUrl);
+  
+    YOLO_WS.onopen = () => {
+      setYoloHint("Live ✅");
+      yoloKeepalive = setInterval(() => {
+        if (YOLO_WS && YOLO_WS.readyState === WebSocket.OPEN) {
+          try { YOLO_WS.send("ping"); } catch {}
+        }
+      }, 10000);
+    };
+  
+    YOLO_WS.onmessage = (ev) => {
+      if (YOLO_WS == null) return;  
+      if (typeof ev.data !== "string") return;
+  
+      yoloMsgs++;
+      document.getElementById("yoloCount").textContent = String(yoloMsgs);
+      document.getElementById("yoloRaw").textContent = ev.data;
+  
+      // Render a friendly list (depends on your JSON structure)
+      try {
+        const obj = JSON.parse(ev.data);
+        renderYoloList(obj);
+      } catch {}
+    };
+  
+    YOLO_WS.onclose = () => {
+      if (yoloKeepalive) { clearInterval(yoloKeepalive); yoloKeepalive = null; }
+      YOLO_WS = null;
+      setYoloHint(stopLatched ? "STOP latched" : "Disconnected");
+    };
+  
+    YOLO_WS.onerror = () => setYoloHint("WS error");
+  }
+  
+  function renderYoloList(obj) {
+    const root = document.getElementById("yoloList");
+    if (!root) return;
+  
+    const dets = obj?.detections || [];
+    if (!Array.isArray(dets) || dets.length === 0) {
+      root.innerHTML = `<div class="small" style="color:#777;">No detections</div>`;
+      return;
+    }
+  
+    // Optional class-id -> name mapping (if your backend sends it)
+    // e.g. obj.names = { "56": "chair", "0": "person", ... } OR array of names
+    const names = obj.names || obj.class_names || null;
+  
+    function nameFromCls(cls) {
+      if (cls == null) return null;
+      const k = String(cls);
+      if (Array.isArray(names)) return names[Number(cls)] ?? null;
+      if (names && typeof names === "object") return names[k] ?? names[Number(cls)] ?? null;
+      return null;
+    }
+  
+    function normalizeDet(d) {
+      // Supports:
+      //  A) array: [x1,y1,x2,y2,conf,cls]
+      //  B) dict: {class_name/conf/bbox/...} with various key spellings
+      if (Array.isArray(d)) {
+        const [x1,y1,x2,y2,conf,cls] = d;
+        const nm = nameFromCls(cls) || (cls != null ? `cls_${cls}` : "obj");
+        return { name: nm, conf: Number(conf ?? 0), bbox: [x1,y1,x2,y2].map(Number) };
+      }
+  
+      if (d && typeof d === "object") {
+        const cls =
+          d.class_id ?? d.cls_id ?? d.cls ?? d.class ?? d.id ?? d.label_id ?? null;
+  
+        const conf =
+          d.confidence ?? d.conf ?? d.score ?? d.prob ?? d.p ?? d.confidence_score ?? 0;
+  
+        const nm =
+          d.class_name ?? d.name ?? d.label ?? nameFromCls(cls) ?? (cls != null ? `cls_${cls}` : "obj");
+  
+        // bbox can be [x1,y1,x2,y2] or {x1,y1,x2,y2} or {xmin,ymin,xmax,ymax}
+        let bb = d.bbox ?? d.box ?? d.xyxy ?? null;
+        if (bb && typeof bb === "object" && !Array.isArray(bb)) {
+          const x1 = bb.x1 ?? bb.xmin ?? bb.left;
+          const y1 = bb.y1 ?? bb.ymin ?? bb.top;
+          const x2 = bb.x2 ?? bb.xmax ?? bb.right;
+          const y2 = bb.y2 ?? bb.ymax ?? bb.bottom;
+          bb = [x1,y1,x2,y2];
+        }
+        if (Array.isArray(bb)) bb = bb.slice(0,4).map(Number);
+  
+        return { name: String(nm), conf: Number(conf), bbox: bb };
+      }
+  
+      return { name: "obj", conf: 0, bbox: null };
+    }
+  
+    const pills = dets.map((d) => {
+      const nd = normalizeDet(d);
+  
+      // show confidence like your overlay: "chair 0.17" (or as percent if you prefer)
+      const conf = isFinite(nd.conf) ? nd.conf : 0;
+      const confTxt = conf <= 1 ? conf.toFixed(2) : conf.toFixed(2); // keep as 0.xx
+      const bbTxt = Array.isArray(nd.bbox)
+        ? ` [${nd.bbox.map(v => Math.round(v)).join(", ")}]`
+        : "";
+  
+      return `
+        <span class="pill" style="margin:4px 6px 0 0; display:inline-block;">
+          ${nd.name} ${confTxt}${bbTxt}
+        </span>
+      `;
+    }).join("");
+  
+    root.innerHTML = pills;
+  }
+
+  function camWsUrlForMode() {
+    const useYolo = document.getElementById("useYoloVideo")?.checked;
+    const path = useYolo ? "/ws/cam_yolo" : "/ws/cam_front";
+  
+    let wsUrl = `${Go2Shared.apiWsBase()}${path}`;
+    if (Go2Shared.cfg.authEnabled) {
+      if (!Go2Shared.state.AUTH_TOKEN) throw new Error("Login required");
+      wsUrl += `?token=${encodeURIComponent(Go2Shared.state.AUTH_TOKEN)}`;
+    }
+    return wsUrl;
+  }
+  
+  function switchVideoSource() {
+    // If streaming, restart stream on toggle
+    if (CAM_WS && CAM_WS.readyState === WebSocket.OPEN) {
+      startStream();
+    }
+  }
+
+</script>
 </body>
 </html>

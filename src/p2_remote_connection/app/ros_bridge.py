@@ -2,7 +2,7 @@ import threading
 import asyncio
 import gzip
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Set, Dict, Any
 
 import rclpy
@@ -16,6 +16,9 @@ from nav_msgs.msg import OccupancyGrid
 from map_msgs.msg import OccupancyGridUpdate
 from fastapi import WebSocket
 from sensor_msgs.msg import CompressedImage
+
+import time
+from std_msgs.msg import String
 
 
 
@@ -142,6 +145,29 @@ def get_cam_store() -> CameraStore:
     return _cam_store
 
 # ============================================================
+# YOLO Store (JPEG bytes)
+# ============================================================
+@dataclass
+class YoloStore:
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    clients: Set[WebSocket] = field(default_factory=set)
+    seq: int = 0
+    last_json: Optional[str] = None  # JSON string
+
+_yolo_store: Optional[YoloStore] = None
+
+def get_yolo_store() -> YoloStore:
+    global _yolo_store
+    if _yolo_store is None:
+        _yolo_store = YoloStore()
+    return _yolo_store
+
+_yolo_cam_store = CameraStore()
+
+def get_yolo_cam_store() -> CameraStore:
+    return _yolo_cam_store
+
+# ============================================================
 # ROS <-> WEB BRIDGE NODE
 # ============================================================
 class WebRosBridge(Node):
@@ -222,6 +248,20 @@ class WebRosBridge(Node):
 
         # AsyncIO loop provided by FastAPI
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+
+        # ---------------- YOLO subscription ----------------
+        self.sub_yolo = self.create_subscription(
+            String,
+            "/yolo/detections",
+            self._on_yolo_detections,
+            10
+        )
+
+        self.declare_parameter("yolo_cam_topic", "/web/yolo_cam/compressed")
+        yolo_cam_topic = self.get_parameter("yolo_cam_topic").get_parameter_value().string_value        
+        self.sub_yolo_cam = self.create_subscription(
+            CompressedImage, yolo_cam_topic, self._on_yolo_cam, cam_qos
+        )
 
     def set_asyncio_loop(self, loop: asyncio.AbstractEventLoop):
         self._loop = loop
@@ -417,6 +457,66 @@ class WebRosBridge(Node):
         if self._loop:
             asyncio.run_coroutine_threadsafe(update_and_send(), self._loop)
 
+    # ---------------- YOLO detections callback ----------------
+    def _on_yolo_detections(self, msg: String):
+        store = get_yolo_store()
+        data = msg.data  # JSON string
+    
+        async def fanout():
+            # update cache + snapshot clients under lock
+            async with store.lock:
+                store.seq += 1
+                store.last_json = data
+                clients = list(store.clients)
+    
+            dead = []
+            for ws in clients:
+                try:
+                    await ws.send_text(data)
+                except Exception:
+                    dead.append(ws)
+    
+            if dead:
+                async with store.lock:
+                    for ws in dead:
+                        store.clients.discard(ws)
+    
+        if self._loop:
+            asyncio.run_coroutine_threadsafe(fanout(), self._loop)
+
+    def _on_yolo_cam(self, msg: CompressedImage):
+        store = get_yolo_cam_store()
+    
+        jpg = bytes(msg.data)
+        meta = {
+            "stamp": {"sec": int(msg.header.stamp.sec), "nanosec": int(msg.header.stamp.nanosec)},
+            "frame_id": msg.header.frame_id,
+            "format": msg.format,
+        }
+    
+        async def fanout(clients):
+            header = {"t": "cam", "seq": store.seq, "meta": store.meta, "n": len(store.jpg)}
+            dead = []
+            for ws in list(clients):
+                try:
+                    await ws.send_text(json.dumps(header))
+                    await ws.send_bytes(store.jpg)
+                except Exception:
+                    dead.append(ws)
+            for ws in dead:
+                clients.discard(ws)
+    
+        async def update_and_send():
+            async with store.lock:
+                store.seq += 1
+                store.jpg = jpg
+                store.meta = meta
+                clients = set(store.clients)
+    
+            await fanout(clients)
+    
+        if self._loop:
+            asyncio.run_coroutine_threadsafe(update_and_send(), self._loop)
 
 # ============================================================
 # LIFECYCLE HELPERS
@@ -447,3 +547,6 @@ def get_map_store() -> MapStore:
 
 def get_pcd_store() -> PointCloudStore:
     return _pcd_store
+
+def get_yolo_cam_store() -> CameraStore:
+    return _yolo_cam_store

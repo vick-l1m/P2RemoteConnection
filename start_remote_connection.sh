@@ -206,6 +206,31 @@ pids+=("$front_cam_bridge_PID")
 sleep 1.0
 ok_or_die "image_to_compressed_bridge" "$front_cam_bridge_PID"
 
+# ------------------------------------------------------------
+# 0c) YOLO node (for detections + debug visualization)
+# ------------------------------------------------------------
+
+echo "[run_all] Starting YOLO node (/yolo/detections + /yolo_depth/image_raw)..."
+python3 "$PKG_DIR/src/cv/ROS_yolo.py" \
+  > /tmp/ROS_yolo.log 2>&1 &
+
+yolo_PID=$!
+pids+=("$yolo_PID")
+sleep 2.0
+ok_or_die "ROS_yolo" "$yolo_PID"
+
+echo "[run_all] Starting yolo_to_compressed_bridge (/yolo_depth/image_raw -> /web/yolo_cam/compressed)..."
+python3 "$PKG_DIR/src/image_to_compressed_bridge.py" --ros-args \
+  -p in_topic:=/yolo_depth/image_raw \
+  -p out_topic:=/web/yolo_cam/compressed \
+  -p jpeg_quality:=80 \
+  > /tmp/yolo_to_compressed_bridge.log 2>&1 &
+
+yolo_cam_bridge_PID=$!
+pids+=("$yolo_cam_bridge_PID")
+sleep 0.3
+ok_or_die "yolo_to_compressed_bridge" "$yolo_cam_bridge_PID"
+
 # ----------------------------
 # 1) Start FastAPI backend
 # ----------------------------
@@ -292,7 +317,7 @@ if [ "$MODE" = "terminal" ]; then
 elif [ "$MODE" = "movement" ]; then
   echo "[run_all] UI:  http://$HOST_IP:$UI_PORT/app/go2_movement_controller.html"
 else
-  echo "[run_all] UI:  http://$HOST_IP:$UI_PORT/app/go2_joystick.html"
+  echo "[run_all] UI:  http://$HOST_IP:$UI_PORT/app/"
 fi
 
 

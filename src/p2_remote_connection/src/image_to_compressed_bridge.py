@@ -11,9 +11,11 @@ class ImageToCompressedBridge(Node):
         super().__init__("image_to_compressed_bridge")
         self.bridge = CvBridge()
 
-        # Match your existing web bridge default:
-        self.in_topic  = "/front_camera/image_raw"
-        self.out_topic = "/web/front_cam/compressed"
+        # Topics (override via --ros-args -p in_topic:=... -p out_topic:=...)
+        self.declare_parameter("in_topic", "/front_camera/image_raw")
+        self.declare_parameter("out_topic", "/web/front_cam/compressed")
+        self.in_topic  = self.get_parameter("in_topic").get_parameter_value().string_value
+        self.out_topic = self.get_parameter("out_topic").get_parameter_value().string_value
 
         # ✅ INPUT QoS: must match /front_camera/image_raw publisher (RELIABLE)
         in_qos = QoSProfile(

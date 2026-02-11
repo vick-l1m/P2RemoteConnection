@@ -26,6 +26,9 @@ from fastapi.staticfiles import StaticFiles
 from .ros_bridge import get_pcd_store 
 
 from app.ros_bridge import get_cam_store
+from app.ros_bridge import get_yolo_store
+from app.ros_bridge import get_yolo_cam_store
+
 
 # Conditional import: use terminal_ec2 for EC2 deployment, terminal for robot
 if os.getenv("DEPLOYMENT_ENV") == "ec2":
@@ -444,6 +447,91 @@ async def ws_cam_front(websocket: WebSocket):
 
         while True:
             _ = await websocket.receive_text()  # keepalive ping
+            if STOP_LATCHED:
+                await websocket.close(code=1013)
+                return
+    except Exception:
+        pass
+    finally:
+        async with store.lock:
+            store.clients.discard(websocket)
+
+# ------------------------------------------------------------
+# YOLO websocket (JSON detections + JPEG with boxes drawn)
+# ------------------------------------------------------------
+@app.websocket("/ws/yolo")
+async def ws_yolo(websocket: WebSocket):
+    token = websocket.query_params.get("token", "")
+
+    if AUTH_ENABLED:
+        if not GO2_API_TOKEN:
+            await websocket.close(code=1011); return
+        if not hmac.compare_digest(token, GO2_API_TOKEN):
+            await websocket.close(code=1008); return
+
+    await websocket.accept()
+    if STOP_LATCHED:
+        await websocket.close(code=1013); return
+
+    store = get_yolo_store()
+
+    # register + send latest immediately
+    async with store.lock:
+        store.clients.add(websocket)
+        initial = store.last_json
+
+    try:
+        if initial:
+            await websocket.send_text(initial)
+
+        while True:
+            _ = await websocket.receive_text()  # keepalive ping
+            if STOP_LATCHED:
+                await websocket.close(code=1013)
+                return
+    except Exception:
+        pass
+    finally:
+        async with store.lock:
+            store.clients.discard(websocket)
+
+
+@app.websocket("/ws/cam_yolo")
+async def ws_cam_yolo(websocket: WebSocket):
+    token = websocket.query_params.get("token", "")
+
+    if AUTH_ENABLED:
+        if not GO2_API_TOKEN:
+            await websocket.close(code=1011); return
+        if not hmac.compare_digest(token, GO2_API_TOKEN):
+            await websocket.close(code=1008); return
+
+    await websocket.accept()
+    if STOP_LATCHED:
+        await websocket.close(code=1013); return
+
+    store = get_yolo_cam_store()
+
+    async with store.lock:
+        store.clients.add(websocket)
+        initial_header = None
+        initial_jpg = None
+        if store.meta is not None and store.jpg is not None:
+            initial_header = {
+                "t": "cam",
+                "seq": store.seq,
+                "meta": store.meta,
+                "n": len(store.jpg),
+            }
+            initial_jpg = store.jpg
+
+    try:
+        if initial_header:
+            await websocket.send_text(json.dumps(initial_header))
+            await websocket.send_bytes(initial_jpg)
+
+        while True:
+            _ = await websocket.receive_text()
             if STOP_LATCHED:
                 await websocket.close(code=1013)
                 return
